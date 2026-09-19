@@ -1,0 +1,399 @@
+@import "tailwindcss";
+
+/* ============================================================
+   ATRI global styles — token layer.
+   Defaults below are the NEON GACHA skin; SkinProvider overwrites
+   them at runtime when a different skin is active. Tailwind v4
+   `@theme inline` maps them into utilities (bg-ink, text-dim…).
+   ============================================================ */
+
+:root {
+  --ato-bg: #0b0b12;
+  --ato-panel: #12121cee;
+  --ato-panel-2: #1a1a28ee;
+  --ato-text: #f2f2f8;
+  --ato-text-dim: #8b8ba3;
+  --ato-accent: #ff2e88;
+  --ato-accent-2: #00e5ff;
+  --ato-gold: #ffcf5c;
+  --ato-border: #ffffff14;
+  --ato-danger: #ff4d4d;
+  --ato-font-display: "Chakra Petch", sans-serif;
+  --ato-font-body: "Chakra Petch", sans-serif;
+  --ato-font-mono: "JetBrains Mono", monospace;
+  --ato-radius: 2px;
+}
+
+@theme inline {
+  --color-ink: var(--ato-bg);
+  --color-panel: var(--ato-panel);
+  --color-panel2: var(--ato-panel-2);
+  --color-text: var(--ato-text);
+  --color-dim: var(--ato-text-dim);
+  --color-accent: var(--ato-accent);
+  --color-accent2: var(--ato-accent-2);
+  --color-gold: var(--ato-gold);
+  --color-line: var(--ato-border);
+  --color-danger: var(--ato-danger);
+  --font-display: var(--ato-font-display);
+  --font-body: var(--ato-font-body);
+  --font-mono: var(--ato-font-mono);
+  --radius-ato: var(--ato-radius);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--ato-bg);
+  color: var(--ato-text);
+  font-family: var(--ato-font-body);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.6s ease;
+}
+
+::selection {
+  background: var(--ato-accent);
+  color: var(--ato-bg);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ato-accent) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ato-accent) 55%, transparent);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- gacha UI vocabulary ---------- */
+
+/* diagonal-cut panels */
+.clip-slash {
+  clip-path: polygon(0 0, 100% 0, calc(100% - 16px) 100%, 0 100%);
+}
+.clip-slash-r {
+  clip-path: polygon(16px 0, 100% 0, 100% 100%, 0 100%);
+}
+.clip-slash-both {
+  clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+}
+/* cut corner */
+.clip-notch {
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 0 100%);
+}
+.clip-tag {
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+}
+
+.font-jp {
+  font-family: "Zen Kaku Gothic New", sans-serif;
+}
+
+/* vertical decorative text */
+.v-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 0.35em;
+}
+
+/* holographic foil sweep for covers — a strip that crosses once and rests
+   fully off-cover (transform-based: background-position % left the gold tail
+   parked on the art during the hold) */
+.foil::after {
+  content: "";
+  position: absolute;
+  top: -25%;
+  bottom: -25%;
+  left: -80%;
+  width: 80%;
+  background: linear-gradient(
+    105deg,
+    transparent 25%,
+    color-mix(in srgb, var(--ato-accent) 35%, transparent) 45%,
+    color-mix(in srgb, var(--ato-accent-2) 40%, transparent) 55%,
+    color-mix(in srgb, var(--ato-gold) 35%, transparent) 65%,
+    transparent 80%
+  );
+  mix-blend-mode: color-dodge;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+.foil:hover::after {
+  opacity: 1;
+  animation: foil-sweep 4.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes foil-sweep {
+  0% {
+    transform: translateX(0); /* strip rests fully outside the left edge */
+  }
+  34% {
+    transform: translateX(340%); /* crossed and fully outside the right edge */
+  }
+  100% {
+    transform: translateX(340%); /* rest between passes — nothing visible */
+  }
+}
+
+/* equalizer glyph on the playing track row */
+.eq-glyph {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+.eq-glyph > i {
+  width: 3px;
+  background: var(--ato-accent);
+  animation: eq-bounce 0.9s ease-in-out infinite;
+  transform-origin: bottom;
+}
+.eq-glyph > i:nth-child(2) {
+  animation-delay: 0.25s;
+}
+.eq-glyph > i:nth-child(3) {
+  animation-delay: 0.5s;
+}
+.eq-glyph.paused > i {
+  animation-play-state: paused;
+}
+@keyframes eq-bounce {
+  0%,
+  100% {
+    height: 30%;
+  }
+  50% {
+    height: 100%;
+  }
+}
+
+/* themed range slider — accent fill like the seek bar (set --fill to the %),
+   diamond thumb echoing the NowPlaying seek handle */
+.ato-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  outline: none;
+  background: linear-gradient(
+    90deg,
+    var(--ato-accent) 0 var(--fill, 0%),
+    var(--ato-border) var(--fill, 0%) 100%
+  );
+  transition: height 0.15s ease;
+}
+.ato-slider:hover {
+  height: 5px;
+}
+.ato-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 9px;
+  width: 9px;
+  background: var(--ato-accent);
+  transform: rotate(45deg);
+  cursor: pointer;
+}
+.ato-slider::-moz-range-thumb {
+  height: 9px;
+  width: 9px;
+  border: none;
+  border-radius: 0;
+  background: var(--ato-accent);
+  transform: rotate(45deg);
+  cursor: pointer;
+}
+
+/* EQ band slider — ±12dB range; --fill marks the thumb position (same
+   left-anchored accent fill as .ato-slider, so 50% = 0dB) */
+.eq-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  outline: none;
+  background: linear-gradient(
+    90deg,
+    var(--ato-accent) 0 var(--fill, 50%),
+    var(--ato-border) var(--fill, 50%) 100%
+  );
+}
+.eq-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 10px;
+  width: 10px;
+  background: var(--ato-accent);
+  transform: rotate(45deg);
+  cursor: pointer;
+}
+.eq-slider::-moz-range-thumb {
+  height: 10px;
+  width: 10px;
+  border: none;
+  border-radius: 0;
+  background: var(--ato-accent);
+  transform: rotate(45deg);
+  cursor: pointer;
+}
+.eq-slider:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* karaoke lyrics active line */
+.lrc-active {
+  color: var(--ato-accent) !important;
+  font-weight: 700;
+  opacity: 1 !important;
+}
+
+/* focus ring */
+:focus-visible {
+  outline: 2px solid var(--ato-accent-2);
+  outline-offset: 2px;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+input,
+select {
+  font-family: inherit;
+}
+
+/* ---------- PERSONA skin — white/black jagged textboxes ---------- */
+/* White boxes carry black text; text sitting directly on the black/red
+   background stays white. Gated on [data-skin] (set by SkinProvider). */
+[data-skin="persona-5"] .bg-panel,
+[data-skin="persona-5"] .bg-panel2,
+/* elements painted with the panel token via inline style (skin cards, etc.) */
+[data-skin="persona-5"] [style*="--ato-panel"] {
+  color: #101014;
+}
+[data-skin="persona-5"] .bg-panel .text-dim,
+[data-skin="persona-5"] .bg-panel2 .text-dim,
+[data-skin="persona-5"] [style*="--ato-panel"] .text-dim,
+[data-skin="persona-5"] .bg-panel .text-text,
+[data-skin="persona-5"] .bg-panel2 .text-text,
+[data-skin="persona-5"] [style*="--ato-panel"] .text-text {
+  color: #3c3c44;
+}
+[data-skin="persona-5"] .bg-panel .text-dim,
+[data-skin="persona-5"] .bg-panel2 .text-dim,
+[data-skin="persona-5"] [style*="--ato-panel"] .text-dim {
+  color: #55555e;
+}
+/* P5 kinetic energy: subtle tilt on boxes and chips (transform only) */
+[data-skin="persona-5"] .bg-panel {
+  transform: rotate(-0.6deg);
+}
+[data-skin="persona-5"] .clip-tag {
+  transform: rotate(-1deg);
+}
+[data-skin="persona-5"] .bg-panel:hover {
+  transform: rotate(0deg);
+  transition: transform 0.25s cubic-bezier(0.85, 0, 0.1, 1);
+}
+
+/* ---------- MINIMAL + SOFT POP skins — soft Spotify-like: rounded, not angular ---------- */
+/* Retire the clip-slash vocabulary: every cut corner becomes a rounded corner */
+[data-skin="minimal"] .clip-slash,
+[data-skin="minimal-light"] .clip-slash,
+[data-skin="soft-pop"] .clip-slash,
+[data-skin="soft-pop-red"] .clip-slash,
+[data-skin="soft-pop-gray"] .clip-slash,
+[data-skin="soft-pop-lavender"] .clip-slash,
+[data-skin="minimal"] .clip-slash-r,
+[data-skin="minimal-light"] .clip-slash-r,
+[data-skin="soft-pop"] .clip-slash-r,
+[data-skin="soft-pop-red"] .clip-slash-r,
+[data-skin="soft-pop-gray"] .clip-slash-r,
+[data-skin="soft-pop-lavender"] .clip-slash-r,
+[data-skin="minimal"] .clip-slash-both,
+[data-skin="minimal-light"] .clip-slash-both,
+[data-skin="soft-pop"] .clip-slash-both,
+[data-skin="soft-pop-red"] .clip-slash-both,
+[data-skin="soft-pop-gray"] .clip-slash-both,
+[data-skin="soft-pop-lavender"] .clip-slash-both,
+[data-skin="minimal"] .clip-notch,
+[data-skin="minimal-light"] .clip-notch,
+[data-skin="soft-pop"] .clip-notch,
+[data-skin="soft-pop-red"] .clip-notch,
+[data-skin="soft-pop-gray"] .clip-notch,
+[data-skin="soft-pop-lavender"] .clip-notch,
+[data-skin="minimal"] .clip-tag,
+[data-skin="minimal-light"] .clip-tag,
+[data-skin="soft-pop"] .clip-tag,
+[data-skin="soft-pop-red"] .clip-tag,
+[data-skin="soft-pop-gray"] .clip-tag,
+[data-skin="soft-pop-lavender"] .clip-tag {
+  clip-path: none;
+  border-radius: var(--ato-radius);
+}
+/* Inline slanted shapes (toggle track + knob, grade/HI-RES badges, boot wipe
+   panels) — !important beats the inline style. Spans go full pill/circle,
+   matching Spotify's chip + toggle language. */
+[data-skin="minimal"] [style*="polygon"],
+[data-skin="minimal-light"] [style*="polygon"],
+[data-skin="soft-pop"] [style*="polygon"],
+[data-skin="soft-pop-red"] [style*="polygon"],
+[data-skin="soft-pop-gray"] [style*="polygon"],
+[data-skin="soft-pop-lavender"] [style*="polygon"] {
+  clip-path: none !important;
+  border-radius: var(--ato-radius) !important;
+}
+[data-skin="minimal"] span[style*="polygon"],
+[data-skin="minimal-light"] span[style*="polygon"],
+[data-skin="soft-pop"] span[style*="polygon"],
+[data-skin="soft-pop-red"] span[style*="polygon"],
+[data-skin="soft-pop-gray"] span[style*="polygon"],
+[data-skin="soft-pop-lavender"] span[style*="polygon"] {
+  border-radius: 9999px !important;
+}
+/* slider thumb: circle instead of the diamond */
+[data-skin="minimal"] .ato-slider::-webkit-slider-thumb,
+[data-skin="minimal-light"] .ato-slider::-webkit-slider-thumb,
+[data-skin="soft-pop"] .ato-slider::-webkit-slider-thumb,
+[data-skin="soft-pop-red"] .ato-slider::-webkit-slider-thumb,
+[data-skin="soft-pop-gray"] .ato-slider::-webkit-slider-thumb,
+[data-skin="soft-pop-lavender"] .ato-slider::-webkit-slider-thumb {
+  border-radius: 9999px;
+  transform: none;
+}
+[data-skin="minimal"] .ato-slider::-moz-range-thumb,
+[data-skin="minimal-light"] .ato-slider::-moz-range-thumb,
+[data-skin="soft-pop"] .ato-slider::-moz-range-thumb,
+[data-skin="soft-pop-red"] .ato-slider::-moz-range-thumb,
+[data-skin="soft-pop-gray"] .ato-slider::-moz-range-thumb,
+[data-skin="soft-pop-lavender"] .ato-slider::-moz-range-thumb {
+  border-radius: 9999px;
+  transform: none;
+}
+[data-skin="minimal"] .eq-slider::-webkit-slider-thumb,
+[data-skin="minimal-light"] .eq-slider::-webkit-slider-thumb,
+[data-skin="soft-pop"] .eq-slider::-webkit-slider-thumb,
+[data-skin="soft-pop-red"] .eq-slider::-webkit-slider-thumb,
+[data-skin="soft-pop-gray"] .eq-slider::-webkit-slider-thumb,
+[data-skin="soft-pop-lavender"] .eq-slider::-webkit-slider-thumb {
+  border-radius: 9999px;
+  transform: none;
+}
+[data-skin="minimal"] .eq-slider::-moz-range-thumb,
+[data-skin="minimal-light"] .eq-slider::-moz-range-thumb,
+[data-skin="soft-pop"] .eq-slider::-moz-range-thumb,
+[data-skin="soft-pop-red"] .eq-slider::-moz-range-thumb,
+[data-skin="soft-pop-gray"] .eq-slider::-moz-range-thumb,
+[data-skin="soft-pop-lavender"] .eq-slider::-moz-range-thumb {
+  border-radius: 9999px;
+  transform: none;
+}

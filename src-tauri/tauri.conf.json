@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ATRI",
+  "version": "0.2.0",
+  "identifier": "app.atori.player",
+  "build": {
+    "beforeDevCommand": "npm run dev -- --port 1430 --strictPort false",
+    "devUrl": "http://localhost:1430",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "ATRI — アトリ",
+        "width": 1400,
+        "height": 880,
+        "minWidth": 980,
+        "minHeight": 640,
+        "backgroundColor": "#0B0B12"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/Fleurdelyx/atori/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg0MDJDNUMxQjc0MDQyQUUKUldTdVFrQzN3Y1VDaEREK1VqaVFzbWVIMmJ4bkpzOWc3dnYrcURibVZCRnBBck1WakZtQUxDWlkK"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "icon": ["icons/icon.ico", "icons/32x32.png", "icons/128x128.png", "icons/icon.png"]
+  }
+}

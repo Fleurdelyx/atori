@@ -1,0 +1,22 @@
+name = "atori-cloud"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+[vars]
+# Dev defaults — override in production with `wrangler secret put AUTH_TOKEN`
+# and `wrangler secret put ALLOWED_ORIGIN` (or set vars here / in the dashboard).
+ALLOWED_ORIGIN = "http://localhost:1420"
+AUTH_TOKEN = "dev-token"
+
+# D1: accounts, sessions, favorites, cloud playlists.
+# Local dev: `pnpm wrangler d1 migrations apply atori-auth --local`
+# Production: `wrangler d1 create atori-auth` then
+#             `pnpm wrangler d1 migrations apply atori-auth --remote`
+[[d1_databases]]
+binding = "AUTH"
+database_name = "atori-auth"
+database_id = "atori-auth" # replace with the real id after `wrangler d1 create`
+
+[[r2_buckets]]
+binding = "LIBRARY"
+bucket_name = "atori-library"
