@@ -202,9 +202,6 @@ function CloudSection() {
           <Cloud className="h-5 w-5" style={{ color: connected ? "var(--ato-accent-2)" : "var(--ato-text-dim)" }} />
           <div>
             <div className="text-sm font-semibold">LEGACY — SHARED TOKEN (SELF-HOST)</div>
-            <div className="font-mono text-[9px] tracking-[0.2em] text-dim">
-              NO ACCOUNTS — ONE TOKEN FOR THE WHOLE BUCKET
-            </div>
           </div>
         </div>
       <label className="mb-3 block">
@@ -257,7 +254,6 @@ function CloudSection() {
       </div>
       <p className="font-mono mt-4 text-[9px] leading-relaxed tracking-[0.1em] text-dim">
         STREAM REQUESTS PASS THE TOKEN AS A QUERY PARAM (MEDIA ELEMENTS CANNOT SEND HEADERS).
-        KEEP YOUR WORKER URL UNLISTED AND ROTATE THE TOKEN IF IT LEAKS.
       </p>
     </div>
   );
@@ -386,12 +382,11 @@ export function SettingsScreen() {
                 </button>
               ))}
             </div>
-            <p className="font-mono mt-2 text-[9px] tracking-[0.2em] text-dim">
-              {bgStyle === "skin"
-                ? "EACH SKIN CARRIES ITS OWN SCENE"
-                : (BG_STYLES.find((s) => s.id === bgStyle)?.blurb ?? "").toUpperCase()}
-              {" — TINTED BY THE ACTIVE SKIN"}
-            </p>
+            {bgStyle !== "skin" && (
+              <p className="font-mono mt-2 text-[9px] tracking-[0.2em] text-dim">
+                {(BG_STYLES.find((s) => s.id === bgStyle)?.blurb ?? "").toUpperCase()}
+              </p>
+            )}
           </div>
 
           <div className="mb-4 flex gap-2">
@@ -413,7 +408,7 @@ export function SettingsScreen() {
           <p className="font-mono mb-5 text-[9px] tracking-[0.2em] text-dim">
             SHADER DETAIL / RESOLUTION SCALER — LOWER IF YOUR GPU STRUGGLES
           </p>
-          <Toggle on={calm} onChange={setCalm} label="CALM MODE — freeze ambient motion (respects prefers-reduced-motion)" />
+          <Toggle on={calm} onChange={setCalm} label="CALM MODE (reduced motion)" />
         </div>
       </section>
 
@@ -502,9 +497,6 @@ export function SettingsScreen() {
             </div>
             <div className="mt-4">
               <Toggle on={smartVolume} onChange={setSmartVolume} label="SMART VOLUME — learn each track's loudness and level playback" />
-              <p className="font-mono mt-1 text-[9px] tracking-[0.15em] text-dim">
-                LEARNS A FEW SECONDS INTO EACH TRACK — STORED PER TRACK, APPLIED ON PLAY
-              </p>
             </div>
             <div className="mt-4">
               <div className="font-mono mb-2 text-[9px] tracking-[0.3em] text-dim">SLEEP タイマー</div>
@@ -540,9 +532,6 @@ export function SettingsScreen() {
                   <SleepCountdown endsAt={sleepEndsAt} />
                 )}
               </div>
-              <p className="font-mono mt-2 text-[9px] tracking-[0.2em] text-dim">
-                FADES OUT AND PAUSES WHEN THE TIMER HITS ZERO
-              </p>
             </div>
           </div>
         </div>
@@ -618,7 +607,7 @@ export function SettingsScreen() {
         <SectionHeader title="ABOUT" jp="情報" />
         <div className="font-mono flex items-center gap-3 text-[10px] tracking-[0.2em] text-dim">
           <Shield className="h-3.5 w-3.5" style={{ color: "var(--ato-gold)" }} />
-          ATRI v0.2.0 // LOCAL-FIRST — YOUR MUSIC NEVER LEAVES THIS MACHINE
+          ATRI // LOCAL-FIRST
         </div>
       </section>
     </div>

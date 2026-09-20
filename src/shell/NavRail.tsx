@@ -82,7 +82,6 @@ export function NavRail() {
             SKIN: {skin.name}
           </span>
         </button>
-        <div className="font-mono text-[9px] tracking-[0.2em] text-dim opacity-50">v0.2.0 // LOCAL</div>
       </div>
     </nav>
   );
