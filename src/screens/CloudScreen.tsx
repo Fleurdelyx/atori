@@ -141,7 +141,6 @@ export function CloudScreen() {
     <div className="flex h-full flex-col px-8 py-7">
       <header className="mb-5 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="font-mono text-[10px] tracking-[0.35em] text-dim">PHASE 5 // CLOUDFLARE R2</div>
           <h1 className="font-display mt-1 text-3xl font-bold tracking-wide">
             CLOUD <span className="font-jp text-lg text-dim">クラウド</span>
           </h1>

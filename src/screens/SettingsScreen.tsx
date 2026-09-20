@@ -283,6 +283,8 @@ export function SettingsScreen() {
   const sleepEndsAt = useUi((s) => s.sleepEndsAt);
   const setSleepEndsAt = useUi((s) => s.setSleepEndsAt);
   const skin = useSkin();
+  const displayName = useUi((s) => s.displayName);
+  const setDisplayName = useUi((s) => s.setDisplayName);
   const dataFileRef = useRef<HTMLInputElement>(null);
 
   // push EQ to the engine whenever it changes
@@ -313,6 +315,17 @@ export function SettingsScreen() {
       {/* appearance / skins */}
       <section className="mb-10">
         <SectionHeader title="APPEARANCE" jp="スキン" />
+        <div className="mb-5">
+          <div className="font-mono mb-2 text-[9px] tracking-[0.3em] text-dim">NAME お名前</div>
+          <input
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="What should ATRI call you?"
+            maxLength={24}
+            className="font-mono w-60 bg-transparent px-3 py-2 text-[11px] outline-none"
+            style={{ border: "1px solid var(--ato-border)" }}
+          />
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {SKINS.map((s) => {
             const active = s.id === skinId;

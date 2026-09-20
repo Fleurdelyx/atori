@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
 import { FolderPlus, HardDriveDownload, Sparkles } from "lucide-react";
 import { useAlbums, useAllTracks, useRecentlyPlayed } from "@/core/library/useLibrary";
+import { useUi } from "@/state/uiStore";
 import { AlbumCard, DirectoryInput, MediaRow, TrackRow } from "@/ui/components";
 import { useImporter } from "@/hooks/useImporter";
 import { supportsDirectoryPicker } from "@/core/library/importService";
@@ -73,6 +74,7 @@ function EmptyLibrary({ onImport, progress }: { onImport: () => void; progress: 
 export function HomeScreen() {
   const albums = useAlbums();
   const tracks = useAllTracks();
+  const displayName = useUi((s) => s.displayName);
   const { progress, importDir, importList } = useImporter();
   const dirRef = useRef<HTMLInputElement>(null);
   const g = greeting();
@@ -108,7 +110,9 @@ export function HomeScreen() {
       <header className="mb-8">
         <div className="font-mono text-[10px] tracking-[0.35em] text-dim">{dateLine.toUpperCase()}</div>
         <h1 className="font-display mt-1 text-3xl font-bold">
-          {g.en}、<span style={{ color: "var(--ato-accent)" }}>{g.jp}</span>
+          {displayName.trim()
+            ? <>{g.en}, {displayName.trim()}. <span style={{ color: "var(--ato-accent)" }}>{g.jp}</span></>
+            : <>{g.en}、<span style={{ color: "var(--ato-accent)" }}>{g.jp}</span></>}
         </h1>
       </header>
 

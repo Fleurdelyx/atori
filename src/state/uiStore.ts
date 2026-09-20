@@ -42,6 +42,8 @@ interface UiState {
   sleepEndsAt: number | null;
   /** karaoke lyric offset in ms — positive pushes lines later */
   lrcOffset: number;
+  /** name shown in the home greeting — empty = generic greeting */
+  displayName: string;
   /** Now Playing layout: null = follow the skin's flatPlayer hint */
   npFlat: boolean | null;
   skinId: string;
@@ -68,6 +70,7 @@ interface UiState {
   setWrappedOpen: (open: boolean) => void;
   setSleepEndsAt: (t: number | null) => void;
   setLrcOffset: (ms: number) => void;
+  setDisplayName: (name: string) => void;
   setNpFlat: (flat: boolean | null) => void;
   setSkin: (id: string) => void;
   setBgStyle: (id: string) => void;
@@ -97,6 +100,7 @@ export const useUi = create<UiState>()(
       wrappedOpen: false,
       sleepEndsAt: null,
       lrcOffset: 0,
+      displayName: "",
       npFlat: null,
       skinId: DEFAULT_SKIN_ID,
       bgStyle: "skin",
@@ -123,6 +127,7 @@ export const useUi = create<UiState>()(
       setWrappedOpen: (wrappedOpen) => set({ wrappedOpen }),
       setSleepEndsAt: (sleepEndsAt) => set({ sleepEndsAt }),
       setLrcOffset: (lrcOffset) => set({ lrcOffset }),
+      setDisplayName: (displayName) => set({ displayName: displayName.trim().slice(0, 24) }),
       setNpFlat: (npFlat) => set({ npFlat }),
       setSkin: (skinId) => set({ skinId }),
       setBgStyle: (bgStyle) => set({ bgStyle }),
@@ -151,6 +156,7 @@ export const useUi = create<UiState>()(
         eqEnabled: s.eqEnabled,
         eq: s.eq,
         lrcOffset: s.lrcOffset,
+        displayName: s.displayName,
         npFlat: s.npFlat,
         cloudUrl: s.cloudUrl,
         cloudToken: s.cloudToken,
