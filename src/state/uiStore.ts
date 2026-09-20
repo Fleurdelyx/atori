@@ -2,6 +2,21 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { DEFAULT_SKIN_ID } from "@/skins/registry";
 import type { FxQuality } from "@/skins/types";
+import type { AuthUser } from "@/core/auth/authStore";
+
+/** A saved server connection — "where my library lives" (own R2 deploy, a friend's worker, …) */
+export interface SavedServer {
+  id: string;
+  name: string;
+  url: string;
+  mode: "legacy" | "account";
+  /** legacy shared token */
+  token?: string;
+  /** account session snapshot — switching restores it directly */
+  sessionToken?: string;
+  user?: AuthUser;
+  email?: string;
+}
 
 export type ViewId = "home" | "library" | "cloud" | "settings" | "album";
 export type AlbumSource = "local" | "cloud";
@@ -59,6 +74,11 @@ interface UiState {
   eq: number[];
   cloudUrl: string;
   cloudToken: string;
+  /** saved server connections — pick one to switch where your library lives */
+  savedServers: SavedServer[];
+  activeServerId: string | null;
+  setSavedServers: (list: SavedServer[]) => void;
+  setActiveServerId: (id: string | null) => void;
   setCloud: (url: string, token: string) => void;
   setBooted: (b: boolean) => void;
   navigate: (view: ViewId, albumKey?: string, albumSource?: AlbumSource) => void;
@@ -115,7 +135,11 @@ export const useUi = create<UiState>()(
       eq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       cloudUrl: "",
       cloudToken: "",
+      savedServers: [],
+      activeServerId: null,
       setCloud: (cloudUrl, cloudToken) => set({ cloudUrl, cloudToken }),
+      setSavedServers: (savedServers) => set({ savedServers }),
+      setActiveServerId: (activeServerId) => set({ activeServerId }),
       setBooted: (booted) => set({ booted }),
       navigate: (view, albumKey, albumSource) =>
         set({ view, albumKey: albumKey ?? null, albumSource: albumSource ?? "local" }),
@@ -160,6 +184,8 @@ export const useUi = create<UiState>()(
         npFlat: s.npFlat,
         cloudUrl: s.cloudUrl,
         cloudToken: s.cloudToken,
+        savedServers: s.savedServers,
+        activeServerId: s.activeServerId,
       }),
     },
   ),

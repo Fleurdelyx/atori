@@ -10,6 +10,10 @@ import {
   cacheTrack,
   type SyncProgress,
 } from "@/core/cloud/cloudService";
+import {
+  saveActiveConnection,
+} from "@/core/cloud/sources";
+import { SavedServers } from "./CloudScreenSavedServers";
 import { accountActive, type CloudPlaylist } from "@/core/cloud/accountService";
 import { useFavorites } from "@/core/cloud/favoritesStore";
 import { useCloudPlaylists } from "@/core/cloud/playlistStore";
@@ -42,6 +46,14 @@ export function CloudScreen() {
   const plCreate = useCloudPlaylists((s) => s.create);
   const plRemove = useCloudPlaylists((s) => s.remove);
   const user = useAuth((s) => s.user);
+  const authServerUrl = useAuth((s) => s.serverUrl);
+  const authSessionToken = useAuth((s) => s.sessionToken);
+
+  // auto-capture the active connection into the saved-server list
+  // (account logins from the auth screen land here too)
+  useEffect(() => {
+    if (authSessionToken && authServerUrl && user) saveActiveConnection();
+  }, [authSessionToken, authServerUrl, user?.id]);
 
   useEffect(() => {
     if (cloudConfigured() && status === "idle") void refresh();
@@ -166,6 +178,9 @@ export function CloudScreen() {
           )}
         </div>
       </header>
+
+      {/* saved server connections — click to switch where your library lives */}
+      <SavedServers />
 
       {/* scrollable middle: config hint + actions + albums */}
       <div className="min-h-0 flex-1 overflow-y-auto">

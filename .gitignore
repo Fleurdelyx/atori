@@ -12,3 +12,5 @@ src-tauri/gen/
 .video_agent/
 gui-test-screenshots/
 pnpm-lock.yaml
+.wrangler/
+worker/.wrangler/
