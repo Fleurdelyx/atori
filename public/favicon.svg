@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2e2652"/>
+      <stop offset="1" stop-color="#110f20"/>
+    </linearGradient>
+    <radialGradient id="disc" cx="0.35" cy="0.3" r="1">
+      <stop offset="0" stop-color="#ff5f9e"/>
+      <stop offset="1" stop-color="#ac2462"/>
+    </radialGradient>
+    <mask id="cut">
+      <rect width="64" height="64" fill="#ffffff"/>
+      <rect x="26.5" y="-14" width="11" height="92" fill="#000000" transform="rotate(27 32 32)"/>
+    </mask>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <g mask="url(#cut)">
+    <circle cx="32" cy="32" r="24" fill="url(#disc)"/>
+    <g fill="none" stroke="#8c1652" stroke-width="0.55" opacity="0.5">
+      <circle cx="32" cy="32" r="5.5"/>
+      <circle cx="32" cy="32" r="8"/>
+      <circle cx="32" cy="32" r="10.5"/>
+      <circle cx="32" cy="32" r="13"/>
+      <circle cx="32" cy="32" r="15.5"/>
+      <circle cx="32" cy="32" r="18"/>
+      <circle cx="32" cy="32" r="20.5"/>
+      <circle cx="32" cy="32" r="23"/>
+    </g>
+    <line x1="22.75" y1="9" x2="22.75" y2="55" stroke="#52d8e8" stroke-width="2" stroke-linecap="round"/>
+    <path d="M46 5 L47.6 10.4 L53 12 L47.6 13.6 L46 19 L44.4 13.6 L39 12 L44.4 10.4 Z" fill="#ffd76e"/>
+  </g>
+  <circle cx="32" cy="32" r="5.9" fill="#110f20"/>
+  <circle cx="32" cy="32" r="4.75" fill="none" stroke="#52d8e8" stroke-width="1.5"/>
+</svg>
