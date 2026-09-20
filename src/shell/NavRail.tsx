@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { AudioWaveform, Cloud, HomeIcon, LibraryBig, Settings2, Palette } from "lucide-react";
+import { Cloud, HomeIcon, LibraryBig, Settings2, Palette } from "lucide-react";
+import { LogoMark } from "@/ui/kit/LogoMark";
 import { useUi, type ViewId } from "@/state/uiStore";
 import { useMotion, useSkin } from "@/skins/SkinProvider";
 import { SKINS } from "@/skins/registry";
@@ -30,7 +31,7 @@ export function NavRail() {
   return (
     <nav className="z-20 hidden w-52 shrink-0 flex-col border-r border-line bg-panel backdrop-blur-md md:flex">
       <div className="flex items-center gap-3 px-5 pt-6 pb-7">
-        <AudioWaveform className="h-7 w-7" style={{ color: "var(--ato-accent)" }} strokeWidth={2.2} />
+        <LogoMark className="h-9 w-9 shrink-0" />
         <div>
           <div className="font-display text-xl leading-none font-bold tracking-widest">ATRI</div>
           <div className="font-jp mt-1 text-[10px] tracking-[0.4em] text-dim">アトリ</div>
