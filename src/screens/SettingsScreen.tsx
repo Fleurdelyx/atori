@@ -333,6 +333,13 @@ export function SettingsScreen() {
   const skin = useSkin();
   const displayName = useUi((s) => s.displayName);
   const setDisplayName = useUi((s) => s.setDisplayName);
+  const [nameDraft, setNameDraft] = useState(displayName);
+  const nameDirty = nameDraft.trim() !== displayName;
+  const saveName = () => {
+    if (!nameDirty) return;
+    setDisplayName(nameDraft);
+  };
+  const resetName = () => setNameDraft(displayName);
   const dataFileRef = useRef<HTMLInputElement>(null);
 
   // push EQ to the engine whenever it changes
@@ -365,14 +372,39 @@ export function SettingsScreen() {
         <SectionHeader title="APPEARANCE" jp="スキン" />
         <div className="mb-5">
           <div className="font-mono mb-2 text-[9px] tracking-[0.3em] text-dim">NAME お名前</div>
-          <input
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="What should ATRI call you?"
-            maxLength={24}
-            className="font-mono w-60 bg-transparent px-3 py-2 text-[11px] outline-none"
-            style={{ border: "1px solid var(--ato-border)" }}
-          />
+          <div className="flex items-center gap-2">
+            <input
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveName();
+                if (e.key === "Escape") resetName();
+              }}
+              placeholder="What should ATRI call you?"
+              maxLength={24}
+              className="font-mono w-60 bg-transparent px-3 py-2 text-[11px] outline-none"
+              style={{ border: "1px solid var(--ato-border)" }}
+            />
+            <button
+              onClick={saveName}
+              disabled={!nameDirty}
+              className="clip-tag font-mono px-3 py-2 text-[10px] font-bold tracking-[0.2em] disabled:opacity-30"
+              style={{ background: "var(--ato-accent)", color: "var(--ato-bg)" }}
+            >
+              SAVE
+            </button>
+            <button
+              onClick={resetName}
+              disabled={!nameDirty}
+              className="font-mono px-2 py-2 text-[10px] tracking-[0.2em] text-dim disabled:opacity-30"
+              style={{ border: "1px solid var(--ato-border)" }}
+            >
+              CANCEL
+            </button>
+          </div>
+          <p className="font-mono mt-1 text-[9px] tracking-[0.15em] text-dim opacity-70">
+            SHOWN IN THE HOME GREETING // SAVED ON THIS DEVICE
+          </p>
         </div>
         {/* theme studio entry: the film-strip switcher lives in the overlay */}
         <div

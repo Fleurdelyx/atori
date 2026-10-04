@@ -126,9 +126,14 @@ export function streamUrlFor(key: string): string {
 }
 
 /** Cover-art objects live under cover/<coverKey> in the bucket; catalogue
- *  manifest entries carry absolute catalogue/cover/… keys, which stream as-is. */
-export function cloudCoverUrl(coverKey: string): string {
-  return streamUrlFor(coverKey.startsWith("catalogue/") ? coverKey : `cover/${coverKey}`);
+ *  manifest entries carry absolute catalogue/cover/… keys, which stream as-is.
+ *  Signed-in sessions embed the stream token; anonymous sessions can only
+ *  read the shared catalogue's public keys (same rule as track streaming). */
+export function coverStreamUrl(coverKey: string): string | null {
+  const inner = coverKey.startsWith("catalogue/") ? coverKey : `cover/${coverKey}`;
+  if (cloudConfigured()) return streamUrlFor(inner);
+  if (inner.startsWith("catalogue/") && catalogueReady()) return anonymousStreamUrl(inner);
+  return null;
 }
 
 /**

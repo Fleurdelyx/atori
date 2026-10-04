@@ -53,11 +53,13 @@ export async function loadCoverUrl(key: string | null | undefined): Promise<stri
     evictIfNeeded();
     return url;
   }
-  // not local: try the cloud worker (covers upload under cover/<key>)
-  const { cloudConfigured, cloudCoverUrl } = await import("@/core/cloud/cloudService");
-  if (!cloudConfigured()) return null;
+  // not local: try the cloud worker (covers upload under cover/<key>;
+  // anonymous sessions can still fetch shared-catalogue covers)
+  const { coverStreamUrl } = await import("@/core/cloud/cloudService");
+  const cloudUrl = coverStreamUrl(key);
+  if (!cloudUrl) return null;
   try {
-    const res = await fetch(cloudCoverUrl(key));
+    const res = await fetch(cloudUrl);
     if (!res.ok) return null;
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
