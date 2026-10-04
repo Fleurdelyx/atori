@@ -34,7 +34,7 @@ import { useUi } from "@/state/uiStore";
 import { fx } from "@/fx/FxDirector";
 import { toast } from "@/state/toastStore";
 import { confirm } from "@/state/confirmStore";
-import { useFavorites } from "@/core/cloud/favoritesStore";
+import { useLikedTracks } from "@/core/cloud/likedTracks";
 import { useCataloguePlaylists } from "@/core/cloud/cataloguePlaylistStore";
 import { CataloguePlaylistCover } from "@/ui/kit/CataloguePlaylistCover";
 import type { Playlist } from "@/core/library/db";
@@ -1008,7 +1008,7 @@ function LocalPlaylistsPane() {
   const savedCatalogueFocus = useUi((s) => s.savedCatalogueFocus);
   const savedCatIds = useUi((s) => s.savedCataloguePls);
   const catPlaylists = useCataloguePlaylists((s) => s.playlists);
-  const likedKeys = useFavorites((s) => s.keys);
+  const liked = useLikedTracks();
   // the left rail can summon a playlist from any view (PINNED section)
   useEffect(() => {
     if (playlistFocus) setSelectedId(playlistFocus.id);
@@ -1019,7 +1019,6 @@ function LocalPlaylistsPane() {
   useEffect(() => {
     if (savedCatalogueFocus) setSelectedId(`cat-${savedCatalogueFocus.id}`);
   }, [savedCatalogueFocus]);
-  const liked = useMemo(() => tracks.filter((t) => likedKeys.includes(t.path)), [tracks, likedKeys]);
   const savedCat = useMemo(
     () => catPlaylists.filter((p) => savedCatIds.includes(p.id)).map((p) => ({ ...p, key: `cat-${p.id}` })),
     [catPlaylists, savedCatIds],

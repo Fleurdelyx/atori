@@ -4,7 +4,7 @@ import { Cloud, Disc3, LibraryBig, Music2, Palette, PanelLeftClose, PanelLeftOpe
 import { LogoMark } from "@/ui/kit/LogoMark";
 import { PlaylistCover } from "@/ui/kit/PlaylistCover";
 import { Heart } from "lucide-react";
-import { useFavorites } from "@/core/cloud/favoritesStore";
+import { useLikedTracks } from "@/core/cloud/likedTracks";
 import { useCataloguePlaylists } from "@/core/cloud/cataloguePlaylistStore";
 import { CataloguePlaylistCover } from "@/ui/kit/CataloguePlaylistCover";
 import { showContextMenu } from "@/state/contextMenuStore";
@@ -201,7 +201,7 @@ function PinnedPlaylists({ collapsed }: { collapsed: boolean }) {
   const openPlaylist = useUi((s) => s.openPlaylist);
   const openLiked = useUi((s) => s.openLiked);
   const likedFocus = useUi((s) => s.likedFocus);
-  const likedCount = useFavorites((s) => s.keys.length);
+  const likedCount = useLikedTracks().length;
   const savedCatIds = useUi((s) => s.savedCataloguePls);
   const savedCatalogueFocus = useUi((s) => s.savedCatalogueFocus);
   const catPlaylists = useCataloguePlaylists((s) => s.playlists);
