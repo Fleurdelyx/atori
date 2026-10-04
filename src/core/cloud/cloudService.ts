@@ -239,9 +239,13 @@ export interface CataloguePlaylist {
 }
 
 export async function fetchCataloguePlaylists(): Promise<CataloguePlaylist[]> {
-  const { base } = cfg();
-  const res = await fetch(`${base}/api/catalogue/playlists`, { headers: headers() });
-  if (res.status === 401) throw new CloudAuthError();
+  // catalogueBase, not cfg(): the playlists GET is public, so signed-out
+  // visitors (empty cfg base) must still hit the remembered/default server
+  const authed = accountCfg() !== null;
+  const res = await fetch(`${catalogueBase()}/api/catalogue/playlists`, {
+    headers: authed ? headers() : {},
+  });
+  if (authed && res.status === 401) throw new CloudAuthError();
   if (!res.ok) throw new Error(`catalogue playlists fetch failed: HTTP ${res.status}`);
   const data = (await res.json()) as { playlists?: CataloguePlaylist[] };
   return data.playlists ?? [];
