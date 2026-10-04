@@ -5,7 +5,7 @@ compatibility_date = "2025-09-01"
 [vars]
 # Dev defaults: override in production with `wrangler secret put AUTH_TOKEN`
 # and `wrangler secret put ALLOWED_ORIGIN` (or set vars here / in the dashboard).
-ALLOWED_ORIGIN = "http://localhost:1430, http://127.0.0.1:1430, http://localhost:1431, http://127.0.0.1:1431, http://tauri.localhost" # add your Vercel URL once deployed # add your Vercel URL once deployed
+ALLOWED_ORIGIN = "http://localhost:1430, http://127.0.0.1:1430, http://localhost:1431, http://127.0.0.1:1431, http://tauri.localhost, https://atori.vercel.app"
 AUTH_TOKEN = "dev-token"
 
 # D1: accounts, sessions, favorites, cloud playlists.
