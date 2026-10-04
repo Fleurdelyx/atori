@@ -1,7 +1,7 @@
 import type { SkinDef } from "./types";
 
 /**
- * GOD EATER — industrial aragami-hunt theme.
+ * GOD EATER: industrial aragami-hunt theme.
  * Obsidian and gunmetal plates, white HUD type, aragami orange-red accents,
  * hazard chevrons and rising embers. Heavy condensed Teko for the HUD feel.
  */

@@ -6,7 +6,7 @@ import { useCloud } from "@/core/cloud/cloudStore";
 import { toast } from "@/state/toastStore";
 
 /**
- * AuthScreen — sign in / create an account on an atori-cloud worker.
+ * AuthScreen: sign in / create an account on an atori-cloud worker.
  * Opens from SETTINGS → ACCOUNT and automatically when a session expires.
  * Note: password fields intentionally omit the autoComplete attribute.
  */
@@ -29,7 +29,7 @@ export function AuthScreen() {
   useEffect(() => {
     if (authOpen) {
       setMode(requestedMode);
-      setError(sessionExpired ? "Session expired — sign in again" : "");
+      setError(sessionExpired ? "Session expired: sign in again" : "");
       setPassword("");
       setBusy(false);
     }
@@ -48,6 +48,7 @@ export function AuthScreen() {
       toast(`Signed in as ${r.user.email}`, "success", "サインイン");
       setAuthOpen(false);
       void refresh();
+      void import("@/core/cloud/catalogueStore").then((m) => m.useCatalogue.getState().refresh());
     } catch (e) {
       setError(String((e as Error).message ?? e));
     } finally {
@@ -180,7 +181,7 @@ export function AuthScreen() {
             </button>
 
             <p className="font-mono mt-4 text-[9px] leading-relaxed tracking-[0.1em] text-dim">
-              YOUR LIBRARY IS SCOPED TO THIS ACCOUNT ON THE WORKER — SIGN IN ON ANY DEVICE TO STREAM IT.
+              YOUR LIBRARY IS SCOPED TO THIS ACCOUNT ON THE WORKER. SIGN IN ON ANY DEVICE TO STREAM IT.
             </p>
           </motion.div>
         </motion.div>

@@ -1,16 +1,13 @@
 /**
- * ATRI app-icon generator — the cut-slash vinyl.
- * Rounded-square charcoal tile, gradient vinyl disc with groove rings,
- * the signature diagonal slash cutting through it (cyan-edged), spindle
- * ring, and a small anime sparkle accent.
- *
- * Renders every icon the project ships: src-tauri/icons/* (png set + ico)
- * and public/icons/* (PWA) — plus a favicon. Stdlib only.
+ * ATRI app-icon generator: the pink star-slash mark (31A artwork).
+ * Decodes scripts/assets/31a-icon.png (RGBA, any square size) and resamples
+ * it (Catmull-Rom) to every icon the project ships: src-tauri/icons/* (png
+ * set + ico) and public/icons/* (PWA), plus public/favicon.png. Stdlib only.
  *
  *   node scripts/gen-app-icon.mjs
  */
-import { deflateSync } from "node:zlib";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { deflateSync, inflateSync } from "node:zlib";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -60,6 +57,38 @@ function encodePng(size, rgba) {
   return Buffer.concat([sig, pngChunk("IHDR", ihdr), pngChunk("IDAT", deflateSync(raw)), pngChunk("IEND", Buffer.alloc(0))]);
 }
 
+/**
+ * A 32bpp DIB (BMP) frame for the ico. Windows only decodes PNG-compressed
+ * ico entries at 256x256: the classic LoadImage path used for window-class
+ * icons skips smaller PNG frames and falls back to the 256 image scaled down,
+ * which turns the 16/32px caption/taskbar icon into mud. Small frames must be
+ * raw BMP: BITMAPINFOHEADER (height doubled for the XOR+AND masks) + bottom-up
+ * BGRA pixels + an all-zero 1bpp AND mask (alpha comes from the channel).
+ */
+function encodeBmpFrame(size, rgba) {
+  const header = Buffer.alloc(40);
+  header.writeUInt32LE(40, 0);
+  header.writeInt32LE(size, 4);
+  header.writeInt32LE(size * 2, 8); // XOR + AND mask height
+  header.writeUInt16LE(1, 12); // planes
+  header.writeUInt16LE(32, 14); // bpp
+  const andStride = ((size + 31) >> 5) << 2;
+  const andSize = andStride * size;
+  header.writeUInt32LE(size * size * 4 + andSize, 20);
+  const xor = Buffer.alloc(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const si = (y * size + x) * 4; // top-down RGBA
+      const di = ((size - 1 - y) * size + x) * 4; // bottom-up BGRA
+      xor[di] = rgba[si + 2];
+      xor[di + 1] = rgba[si + 1];
+      xor[di + 2] = rgba[si];
+      xor[di + 3] = rgba[si + 3];
+    }
+  }
+  return Buffer.concat([header, xor, Buffer.alloc(andSize)]);
+}
+
 function makeIco(pngs) {
   const count = pngs.length;
   const header = Buffer.alloc(6);
@@ -84,153 +113,113 @@ function makeIco(pngs) {
   return Buffer.concat([header, ...entries, ...pngs.map((p) => p.data)]);
 }
 
-/* ---------- palette ---------- */
+/* ---------- png decoding (the source artwork) ---------- */
 
-const BG_TOP = [46, 38, 82]; // #2e2652 dark violet
-const BG_BOT = [17, 15, 32]; // #110f20
-const DISC_A = [255, 95, 158]; // hot magenta (inner)
-const DISC_B = [172, 36, 98]; // deep plum (outer)
-const GROOVE = [140, 22, 82]; // groove band
-const CYAN = [82, 216, 232]; // #52d8e8
-const GOLD = [255, 215, 110]; // #ffd76e
-const WHITE = [255, 255, 255];
-
-const mix = (a, b, t) => [
-  Math.round(a[0] + (b[0] - a[0]) * t),
-  Math.round(a[1] + (b[1] - a[1]) * t),
-  Math.round(a[2] + (b[2] - a[2]) * t),
-];
-const smooth = (edge0, edge1, x) => {
-  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
-};
-
-/* ---------- the design, drawn at BASE resolution ---------- */
-
-const BASE = 1024; // drawn 2x, box-downscaled for anti-aliasing
-const S = 2;
-const SIZE = 512;
-const CORNER = 210;
-const CX = 512;
-const CY = 512;
-const DISC_R = 386;
-const WEDGE = 46; // half-width of the cut slash (base units)
-const SLASH_DIR = (-117 * Math.PI) / 180; // slash angle: up-right to down-left
-
-function drawBase() {
-  const px = Buffer.alloc(BASE * BASE * 4);
-  const set = (x, y, r, g, b, a = 255) => {
-    if (x < 0 || y < 0 || x >= BASE || y >= BASE) return;
-    const i = (y * BASE + x) * 4;
-    px[i] = r;
-    px[i + 1] = g;
-    px[i + 2] = b;
-    px[i + 3] = a;
-  };
-  const ux = Math.cos(SLASH_DIR);
-  const uy = Math.sin(SLASH_DIR);
-
-  for (let y = 0; y < BASE; y++) {
-    for (let x = 0; x < BASE; x++) {
-      // tile: rounded square with a vertical gradient, corners transparent
-      const grad = y / BASE;
-      let col = mix(BG_TOP, BG_BOT, grad);
-      const cr = CORNER;
-      const nx = Math.max(cr - x, 0, x - (BASE - cr));
-      const ny = Math.max(cr - y, 0, y - (BASE - cr));
-      const outsideCorner = Math.hypot(nx, ny) > cr && (x < cr || x > BASE - cr) && (y < cr || y > BASE - cr);
-      const outsideRect = x < 0 || y < 0;
-      let alpha = 255;
-      if (outsideCorner || outsideRect) {
-        set(x, y, 0, 0, 0, 0);
-        continue;
-      }
-      // corner edge anti-alias: fade the outermost 3px of the round corner
-      const cornerEdge = Math.hypot(nx, ny) - cr;
-      if ((x < cr || x > BASE - cr) && (y < cr || y > BASE - cr) && cornerEdge > -3) {
-        alpha = Math.round(255 * (1 + cornerEdge / 3));
-        alpha = Math.max(0, Math.min(255, alpha));
-      }
-
-      // vinyl disc (polar)
-      const dx = x - CX;
-      const dy = y - CY;
-      const r = Math.hypot(dx, dy);
-      const perp = dx * uy - dy * ux; // signed distance to the slash axis
-      const inWedge = Math.abs(perp) < WEDGE;
-      // cyan lip along the upper edge of the cut (outside the band)
-      if (r <= DISC_R && !inWedge && perp < -WEDGE && perp > -WEDGE - 16) {
-        const t = 1 - (-perp - WEDGE) / 16;
-        const c = mix(CYAN, DISC_A, 0.3 * (1 - t));
-        set(x, y, c[0], c[1], c[2], alpha);
-        continue;
-      }
-      if (r <= DISC_R && !inWedge) {
-        // base gradient + groove rings + angular sheen
-        const t = r / DISC_R;
-        let c = mix(DISC_A, DISC_B, smooth(0.05, 0.95, t));
-        const grooveT = ((r - 48) % 40) / 40;
-        if (r > 48 && grooveT < 0.18) c = mix(c, GROOVE, 0.5 * (1 - grooveT / 0.18));
-        const sheen = 0.5 * Math.cos(Math.atan2(dy, dx) - 2.35) + 0.5;
-        if (sheen > 0.45) c = mix(c, WHITE, (sheen - 0.45) * 0.55);
-        // outer rim line
-        if (r > DISC_R - 10) c = mix(c, DISC_B, 0.6);
-        set(x, y, c[0], c[1], c[2], alpha);
-        continue;
-      }
-      // spindle ring (cyan) over the cut
-      if (r <= 76 && r >= 62) {
-        set(x, y, CYAN[0], CYAN[1], CYAN[2], alpha);
-        continue;
-      }
-      // sparkle: small 4-point star, top-right quadrant
-      const sx = x - 812;
-      const sy = y - 200;
-      if (Math.hypot(sx, sy) < 66) {
-        const a = Math.atan2(sy, sx);
-        const spikes = Math.pow(Math.abs(Math.cos(2 * a)), 6);
-        const body = 1 - Math.hypot(sx, sy) / 66;
-        if (spikes * 1.15 + body * 0.5 > 0.85) {
-          set(x, y, GOLD[0], GOLD[1], GOLD[2], alpha);
-          continue;
-        }
-      }
-      set(x, y, col[0], col[1], col[2], alpha);
+function decodePng(buf) {
+  if (buf.readUInt32BE(0) !== 0x89504e47) throw new Error("not a png");
+  let pos = 8;
+  let width = 0;
+  let height = 0;
+  let colorType = 0;
+  let bitDepth = 0;
+  const idat = [];
+  while (pos < buf.length) {
+    const len = buf.readUInt32BE(pos);
+    const type = buf.toString("ascii", pos + 4, pos + 8);
+    const data = buf.subarray(pos + 8, pos + 8 + len);
+    if (type === "IHDR") {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      bitDepth = data[8];
+      colorType = data[9];
+      if (data[12] !== 0) throw new Error("interlaced png unsupported");
+    } else if (type === "IDAT") {
+      idat.push(data);
     }
+    pos += 12 + len;
   }
-  if (process.env.ICON_DEBUG) {
-    const at = (x, y) => px[(y * BASE + x) * 4 + 3];
-    console.error("DEBUG alpha @512,512:", at(512, 512), "@512,300:", at(512, 300), "@100,100:", at(100, 100));
+  if (bitDepth !== 8 || (colorType !== 6 && colorType !== 2)) {
+    throw new Error(`unsupported png: depth ${bitDepth}, color type ${colorType} (want 8-bit RGBA or RGB)`);
   }
-  return px;
+  const channels = colorType === 6 ? 4 : 3;
+  const stride = width * channels;
+  const raw = inflateSync(Buffer.concat(idat));
+  const px = Buffer.alloc(width * height * 4);
+  const paeth = (a, b, c) => {
+    const p = a + b - c;
+    const pa = Math.abs(p - a);
+    const pb = Math.abs(p - b);
+    const pc = Math.abs(p - c);
+    return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+  };
+  const prev = Buffer.alloc(stride);
+  const line = Buffer.alloc(stride);
+  for (let y = 0; y < height; y++) {
+    const filter = raw[y * (stride + 1)];
+    raw.copy(line, 0, y * (stride + 1) + 1, (y + 1) * (stride + 1));
+    for (let x = 0; x < stride; x++) {
+      const a = x >= channels ? line[x - channels] : 0;
+      const b = prev[x];
+      const c = x >= channels ? prev[x - channels] : 0;
+      if (filter === 1) line[x] = (line[x] + a) & 0xff;
+      else if (filter === 2) line[x] = (line[x] + b) & 0xff;
+      else if (filter === 3) line[x] = (line[x] + ((a + b) >> 1)) & 0xff;
+      else if (filter === 4) line[x] = (line[x] + paeth(a, b, c)) & 0xff;
+    }
+    for (let x = 0; x < width; x++) {
+      const di = (y * width + x) * 4;
+      px[di] = line[x * channels];
+      px[di + 1] = line[x * channels + 1];
+      px[di + 2] = line[x * channels + 2];
+      px[di + 3] = channels === 4 ? line[x * channels + 3] : 255;
+    }
+    prev.set(line);
+  }
+  return { width, height, px };
 }
 
-/* ---------- box-downscale ---------- */
+/* ---------- Catmull-Rom resample (separable, edge-clamped) ---------- */
 
-function downscale(src, srcSize, dstSize) {
-  const out = Buffer.alloc(dstSize * dstSize * 4);
-  const f = srcSize / dstSize;
-  if (process.env.ICON_DEBUG && dstSize === 512) {
-    const si = (512 * S * srcSize + 512 * S) * 4;
-    console.error("DEBUG downscale src alpha@(1024,1024):", src[si + 3], "f:", f);
-  }
-  for (let y = 0; y < dstSize; y++) {
-    for (let x = 0; x < dstSize; x++) {
-      let r = 0, g = 0, b = 0, a = 0, n = 0;
-      for (let sy = Math.floor(y * f); sy < Math.floor((y + 1) * f); sy++) {
-        for (let sx = Math.floor(x * f); sx < Math.floor((x + 1) * f); sx++) {
-          const i = (sy * srcSize + sx) * 4;
-          const wa = src[i + 3] / 255;
-          r += src[i] * wa; g += src[i + 1] * wa; b += src[i + 2] * wa; a += src[i + 3];
-          n++;
+function resample(src, sw, sh, dw, dh) {
+  // Catmull-Rom kernel: 1.5|t|^3 - 2.5|t|^2 + 1 (|t|<=1); -0.5|t|^3 + 2.5|t|^2 - 4|t| + 2 (1<|t|<2)
+  const cr = (t) => {
+    const a = t < 0 ? -t : t;
+    if (a <= 1) return 1.5 * a * a * a - 2.5 * a * a + 1;
+    if (a < 2) return -0.5 * a * a * a + 2.5 * a * a - 4 * a + 2;
+    return 0;
+  };
+  const sampleX = new Float32Array(dw * sw * 4);
+  const tmp = new Float32Array(dw * sh * 4);
+  // horizontal pass: src (sw×sh) → tmp (dw×sh)
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < dw; x++) {
+      const fx = (x + 0.5) * (sw / dw) - 0.5;
+      const x0 = Math.floor(fx);
+      for (let c = 0; c < 4; c++) {
+        let acc = 0;
+        for (let m = -1; m <= 2; m++) {
+          const sx = Math.min(sw - 1, Math.max(0, x0 + m));
+          acc += src[(y * sw + sx) * 4 + c] * cr(fx - (x0 + m));
         }
+        tmp[(y * dw + x) * 4 + c] = acc;
       }
-      const o = (y * dstSize + x) * 4;
-      const alpha = a / n;
-      out[o] = alpha > 0 ? Math.round(r / (alpha / 255) / n) : 0;
-      out[o + 1] = alpha > 0 ? Math.round(g / (alpha / 255) / n) : 0;
-      out[o + 2] = alpha > 0 ? Math.round(b / (alpha / 255) / n) : 0;
-      out[o + 3] = Math.round(alpha);
+    }
+  }
+  // vertical pass: tmp → out (dw×dh)
+  const out = Buffer.alloc(dw * dh * 4);
+  for (let y = 0; y < dh; y++) {
+    const fy = (y + 0.5) * (sh / dh) - 0.5;
+    const y0 = Math.floor(fy);
+    for (let x = 0; x < dw; x++) {
+      for (let c = 0; c < 4; c++) {
+        let acc = 0;
+        for (let m = -1; m <= 2; m++) {
+          const sy = Math.min(sh - 1, Math.max(0, y0 + m));
+          acc += tmp[(sy * dw + x) * 4 + c] * cr(fy - (y0 + m));
+        }
+        const v = Math.round(acc);
+        out[(y * dw + x) * 4 + c] = v < 0 ? 0 : v > 255 ? 255 : v;
+      }
     }
   }
   return out;
@@ -238,18 +227,23 @@ function downscale(src, srcSize, dstSize) {
 
 /* ---------- emit ---------- */
 
-const base = drawBase();
-const render = (size) => (size === BASE ? Buffer.from(base) : downscale(base, BASE, size));
+const art = decodePng(readFileSync(join(ROOT, "scripts", "assets", "31a-icon.png")));
+if (art.width !== art.height) throw new Error(`source must be square (got ${art.width}x${art.height})`);
+const render = (size) => resample(art.px, art.width, art.height, size, size);
 
 writeFileSync(join(PWA_OUT, "icon-512.png"), encodePng(512, render(512)));
 writeFileSync(join(PWA_OUT, "icon-256.png"), encodePng(256, render(256)));
 writeFileSync(join(PWA_OUT, "icon-192.png"), encodePng(192, render(192)));
 writeFileSync(join(PWA_OUT, "icon-32.png"), encodePng(32, render(32)));
+writeFileSync(join(PWA_OUT, "favicon.png"), encodePng(64, render(64)));
+writeFileSync(join(ROOT, "public", "favicon.png"), encodePng(64, render(64)));
 writeFileSync(join(TAURI_OUT, "icon.png"), encodePng(512, render(512)));
 writeFileSync(join(TAURI_OUT, "128x128.png"), encodePng(128, render(128)));
 writeFileSync(join(TAURI_OUT, "32x32.png"), encodePng(32, render(32)));
 writeFileSync(join(TAURI_OUT, "256x256.png"), encodePng(256, render(256)));
-writeFileSync(join(TAURI_OUT, "icon.ico"), makeIco(
-  [256, 128, 64, 48, 32, 16].map((s) => ({ size: s, data: encodePng(s, render(s)) })),
-));
-console.log("wrote src-tauri/icons + public/icons from the cut-slash vinyl design");
+writeFileSync(join(TAURI_OUT, "icon.ico"), makeIco([
+  // small frames must be BMP (see encodeBmpFrame): PNG only legal at 256
+  ...[16, 32, 48, 64, 128].map((s) => ({ size: s, data: encodeBmpFrame(s, render(s)) })),
+  { size: 256, data: encodePng(256, render(256)) },
+]));
+console.log(`wrote src-tauri/icons + public/icons + favicon.png from ${art.width}x${art.height} source`);

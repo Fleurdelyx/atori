@@ -14,3 +14,7 @@ gui-test-screenshots/
 pnpm-lock.yaml
 .wrangler/
 worker/.wrangler/
+
+# local artifacts + downloaded binaries
+qa-shots/
+companion/bin/

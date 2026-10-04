@@ -34,10 +34,10 @@ function meta(overrides: Partial<TrackMeta> = {}): TrackMeta {
 
 const TRACK = meta();
 
-// the singleton engine carries state across tests — keep its media side effects inert
+// the singleton engine carries state across tests: keep its media side effects inert
 (engine as unknown as Record<string, unknown>).bumpPlayCount = () => {};
 
-// jsdom 30's URL.createObjectURL crashes on its own Blob internals — the engine
+// jsdom 30's URL.createObjectURL crashes on its own Blob internals: the engine
 // only needs a string src, so pin the blob-URL pair to inert mocks
 URL.createObjectURL = () => "blob:mock-url";
 URL.revokeObjectURL = () => {};
@@ -124,6 +124,8 @@ describe("restoreTrack", () => {
 });
 
 describe("fades (jsdom: no AudioContext → el.volume fallback ramp)", () => {
+  // slider 0.9 → amplitude 0.81 (the engine squares the slider: perceptual curve)
+  const AMP = 0.9 * 0.9;
   beforeEach(() => {
     localStorage.clear();
     engine.setVolume(0.9);
@@ -137,7 +139,7 @@ describe("fades (jsdom: no AudioContext → el.volume fallback ramp)", () => {
     await engine.play();
     expect(engine.el.volume).toBeLessThan(0.5); // ramp started at 0
     await new Promise((r) => setTimeout(r, 900));
-    expect(engine.el.volume).toBeCloseTo(0.9, 1); // settled at user volume
+    expect(engine.el.volume).toBeCloseTo(AMP, 1); // settled at user volume
   }, 10000);
 
   it("pause fades down then restores the volume", async () => {
@@ -146,7 +148,7 @@ describe("fades (jsdom: no AudioContext → el.volume fallback ramp)", () => {
     await new Promise((r) => setTimeout(r, 900)); // let the fade-in settle
     await engine.pause();
     expect(engine.el.paused).toBe(true);
-    expect(engine.el.volume).toBeCloseTo(0.9, 1);
+    expect(engine.el.volume).toBeCloseTo(AMP, 1);
   }, 10000);
 
   it("disabling fades pauses immediately", async () => {
@@ -155,7 +157,7 @@ describe("fades (jsdom: no AudioContext → el.volume fallback ramp)", () => {
     await engine.playQueue([TRACK], 0);
     await engine.pause();
     expect(engine.el.paused).toBe(true);
-    expect(engine.el.volume).toBeCloseTo(0.9, 1);
+    expect(engine.el.volume).toBeCloseTo(AMP, 1);
   }, 10000);
 });
 

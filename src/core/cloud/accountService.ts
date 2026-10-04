@@ -2,7 +2,7 @@ import { accountCfg } from "@/core/auth/authStore";
 import { CloudAuthError } from "./cloudService";
 
 /**
- * AccountService — favorites + cloud playlists endpoints (accounts mode only).
+ * AccountService: favorites + cloud playlists endpoints (accounts mode only).
  * All functions no-op/throw when not signed in; callers check accountActive().
  */
 

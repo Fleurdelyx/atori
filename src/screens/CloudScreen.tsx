@@ -1,18 +1,19 @@
-import { useEffect, useState } from "react";
-import { CloudDownload, CloudUpload, Heart, ListMusic, RefreshCw, Trash2, Wifi, WifiOff } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Check, CloudDownload, CloudUpload, Heart, ListMusic, Pencil, RefreshCw, Search, Server, Trash2, Wifi, WifiOff, X } from "lucide-react";
 import { useCloud } from "@/core/cloud/cloudStore";
 import {
   cloudConfigured,
   CloudAuthError,
   manifestToTracks,
-  syncLibraryUp,
   testConnection,
   cacheTrack,
-  type SyncProgress,
 } from "@/core/cloud/cloudService";
+import { useSync } from "@/core/cloud/syncStore";
 import {
+  activateDefaultServer,
   saveActiveConnection,
 } from "@/core/cloud/sources";
+import { defaultServerConfigured } from "@/core/cloud/defaults";
 import { SavedServers } from "./CloudScreenSavedServers";
 import { accountActive, type CloudPlaylist } from "@/core/cloud/accountService";
 import { useFavorites } from "@/core/cloud/favoritesStore";
@@ -24,19 +25,26 @@ import { usePlayback } from "@/core/audio/playbackStore";
 import { useUi } from "@/state/uiStore";
 import { fx } from "@/fx/FxDirector";
 import { toast } from "@/state/toastStore";
+import { confirm } from "@/state/confirmStore";
+import { showContextMenu, type ContextMenuItem } from "@/state/contextMenuStore";
 import type { TrackMeta } from "@/core/library/types";
 import { AlbumCard, MediaRow } from "@/ui/components";
 import { VirtualTrackList } from "@/ui/kit/VirtualTrackList";
+import { useCatalogue } from "@/core/cloud/catalogueStore";
 
 /**
- * CloudScreen — browse + play the R2-backed library.
+ * CloudScreen: browse + play the R2-backed library.
  * Streams through the atori-cloud worker; per-album offline caching.
  */
 export function CloudScreen() {
   const { manifest, status, error, refresh } = useCloud();
   const cloudUrl = useUi((s) => s.cloudUrl);
-  const [syncing, setSyncing] = useState<SyncProgress | null>(null);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
+  const offlineMode = useUi((s) => s.offlineMode);
+  const cloudSetupDone = useUi((s) => s.cloudSetupDone);
+  const savedServers = useUi((s) => s.savedServers);
+  // sync state is global: it keeps running (and stays visible here) across navigation
+  const syncing = useSync((s) => s.syncing);
+  const syncResult = useSync((s) => s.result);
   const [caching, setCaching] = useState<string | null>(null);
   const [newPlName, setNewPlName] = useState("");
   const playQueue = usePlayback((s) => s.playQueue);
@@ -56,7 +64,9 @@ export function CloudScreen() {
   }, [authSessionToken, authServerUrl, user?.id]);
 
   useEffect(() => {
-    if (cloudConfigured() && status === "idle") void refresh();
+    // idle = fresh session; error = a transient boot-time failure (network not
+    // up yet): retrying on open keeps the library from looking empty
+    if (cloudConfigured() && (status === "idle" || status === "error")) void refresh();
   }, [status, refresh]);
 
   // pull account favorites + playlists when signed in
@@ -64,16 +74,25 @@ export function CloudScreen() {
     if (accountActive()) {
       void useFavorites.getState().pull();
       void useCloudPlaylists.getState().pull();
+      void useCatalogue.getState().refresh();
+      void import("@/core/cloud/cataloguePlaylistStore").then((m) => m.useCataloguePlaylists.getState().pull());
     }
   }, [user?.id]);
 
   const cloudTracks = manifest ? manifestToTracks(manifest) : [];
-  const albums = groupAlbums(cloudTracks);
+  // search filters the visible surface (albums + track table)
+  const [q, setQ] = useState("");
+  const query = q.trim().toLowerCase();
+  const visibleTracks = useMemo(
+    () => (query ? cloudTracks.filter((t) => (t.title + " " + t.artist + " " + t.album).toLowerCase().includes(query)) : cloudTracks),
+    [cloudTracks, query],
+  );
+  const albums = groupAlbums(visibleTracks);
   const savedTracks = cloudTracks.filter((t) => favKeys.includes(t.path));
 
   function playTracks(list: TrackMeta[], start = 0) {
     if (list.length === 0) {
-      toast("Nothing to play here yet — add some tracks", "info", "再生なし");
+      toast("Nothing to play here yet: add some tracks", "info", "再生なし");
       return;
     }
     playQueue(list, start);
@@ -87,46 +106,7 @@ export function CloudScreen() {
   }
 
   const doSync = async () => {
-    setSyncResult(null);
-    if (!cloudConfigured()) {
-      setSyncResult("CLOUD NOT CONFIGURED — SETTINGS → CLOUD");
-      return;
-    }
-    const local = await db.tracks.toArray();
-    if (local.length === 0) {
-      setSyncResult("LOCAL LIBRARY EMPTY — IMPORT FIRST");
-      return;
-    }
-    setSyncing({ done: 0, total: local.length, current: "" });
-    try {
-      const r = await syncLibraryUp(
-        local,
-        async (t) => {
-          const src = await db.sources.get(t.path);
-          if (!src) return null;
-          if (src.handle) {
-            const h = src.handle as FileSystemFileHandle & {
-              queryPermission?: (d: { mode: string }) => Promise<PermissionState>;
-            };
-            try {
-              const state = (await h.queryPermission?.({ mode: "read" })) ?? "granted";
-              if (state !== "granted" && src.file) return src.file;
-              if (state === "granted") return await src.handle.getFile();
-            } catch {
-              /* fall through */
-            }
-          }
-          return src.file ?? null;
-        },
-        setSyncing,
-        async (coverKey) => (await db.covers.get(coverKey))?.blob ?? null,
-      );
-      setSyncResult(`SYNCED ${r.uploaded} TRACKS${r.failed ? ` — ${r.failed} FAILED` : ""}`);
-      await refresh();
-    } catch (e) {
-      setSyncResult(`SYNC FAILED — ${String(e).slice(0, 60)}`);
-    }
-    setSyncing(null);
+    await useSync.getState().start();
   };
 
   const cacheAlbum = async (albumKey: string) => {
@@ -140,7 +120,7 @@ export function CloudScreen() {
       if (e instanceof CloudAuthError) {
         useAuth.getState().setSessionExpired(true);
         useAuth.getState().setAuthOpen(true);
-        toast("Session expired — sign in again", "error", "セッション切れ");
+        toast("Session expired: sign in again", "error", "セッション切れ");
       } else {
         toast(`Cache failed for ${album.name}`, "error");
       }
@@ -179,7 +159,84 @@ export function CloudScreen() {
         </div>
       </header>
 
-      {/* saved server connections — click to switch where your library lives */}
+      {/* first-run connection chooser: or the offline banner while it's on */}
+      {!cloudSetupDone && !offlineMode ? (
+        <div
+          className="clip-notch mb-6 bg-panel p-5 backdrop-blur-md"
+          style={{ border: "1px solid var(--ato-border)" }}
+        >
+          <div className="font-mono mb-1 text-[10px] tracking-[0.35em]" style={{ color: "var(--ato-accent)" }}>
+            HOW SHOULD ATRI CONNECT?
+          </div>
+          <p className="mb-4 text-sm text-dim">
+            Pick where your library lives: changeable anytime. 自分のサーバーも使えます。
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {defaultServerConfigured() && (
+              <button
+                onClick={() => {
+                  if (activateDefaultServer()) {
+                    toast("Sign in to the default server", "info", "サインイン");
+                  }
+                }}
+                className="clip-slash-both font-display flex items-center gap-2 px-5 py-2.5 text-xs font-bold tracking-[0.2em]"
+                style={{
+                  background: "var(--ato-accent)",
+                  color: "var(--ato-bg)",
+                  boxShadow: "0 0 24px color-mix(in srgb, var(--ato-accent) 35%, transparent)",
+                }}
+              >
+                <Wifi className="h-4 w-4" /> USE ATRI CLOUD (DEFAULT)
+              </button>
+            )}
+            <button
+              onClick={() => {
+                useUi.getState().setCloudSetupDone(true);
+                useUi.getState().navigate("settings");
+                toast("Connect your own worker: see README to deploy one", "info", "自分のサーバー");
+              }}
+              className="clip-slash-both font-display flex items-center gap-2 px-5 py-2.5 text-xs font-bold tracking-[0.2em]"
+              style={{ background: "color-mix(in srgb, var(--ato-accent-2) 16%, transparent)", color: "var(--ato-accent-2)" }}
+            >
+              <Server className="h-4 w-4" /> MY OWN SERVER
+            </button>
+            <button
+              onClick={() => {
+                useUi.getState().setOfflineMode(true);
+                useUi.getState().setCloudSetupDone(true);
+                toast("Offline mode: using saved music locally", "success", "オフライン");
+              }}
+              className="clip-slash-both font-display flex items-center gap-2 px-5 py-2.5 text-xs font-bold tracking-[0.2em]"
+              style={{ background: "color-mix(in srgb, var(--ato-text) 6%, transparent)", color: "var(--ato-text-dim)" }}
+            >
+              <WifiOff className="h-4 w-4" /> WORK OFFLINE
+            </button>
+          </div>
+        </div>
+      ) : offlineMode ? (
+        <div
+          className="clip-notch mb-6 flex flex-wrap items-center justify-between gap-3 bg-panel p-4 backdrop-blur-md"
+          style={{ border: "1px dashed var(--ato-border)" }}
+        >
+          <span className="font-mono flex items-center gap-2 text-[10px] tracking-[0.25em] text-dim">
+            <WifiOff className="h-4 w-4" />
+            OFFLINE MODE: PLAYING SAVED MUSIC ONLY
+          </span>
+          <button
+            onClick={() => {
+              useUi.getState().setOfflineMode(false);
+              if (savedServers.length === 0) useUi.getState().setCloudSetupDone(false);
+              toast("Back online: pick a server", "info", "オンライン");
+            }}
+            className="clip-tag px-4 py-2"
+            style={{ background: "color-mix(in srgb, var(--ato-accent-2) 14%, transparent)", color: "var(--ato-accent-2)" }}
+          >
+            <span className="font-mono text-[10px] font-bold tracking-[0.25em]">GO ONLINE</span>
+          </button>
+        </div>
+      ) : null}
+
+      {/* saved server connections: click to switch where your library lives */}
       <SavedServers />
 
       {/* scrollable middle: config hint + actions + albums */}
@@ -192,8 +249,7 @@ export function CloudScreen() {
             Configure your atori-cloud worker endpoint in{" "}
             <button className="underline hover:text-accent" onClick={() => useUi.getState().navigate("settings")}>
               SETTINGS → CLOUD
-            </button>{" "}
-            — then sync your local library up and stream it anywhere.
+            </button>, then sync your local library up and stream it anywhere.
           </div>
         )}
 
@@ -333,29 +389,21 @@ export function CloudScreen() {
             </div>
             <div className="flex flex-col">
               {playlists.map((p) => (
-                <div
+                <CloudPlaylistRow
                   key={p.id}
-                  className="group flex items-center gap-3 px-3 py-2.5"
-                  style={{ borderBottom: "1px solid var(--ato-border)" }}
-                >
-                  <ListMusic className="h-4 w-4 shrink-0 text-dim" />
-                  <button onClick={() => playPlaylist(p)} className="min-w-0 flex-1 text-left">
-                    <span className="block truncate text-[13px] font-medium group-hover:text-accent">{p.name}</span>
-                    <span className="font-mono block text-[10px] text-dim">{p.trackKeys.length} TRACKS</span>
-                  </button>
-                  <button
-                    onClick={() => plRemove(p.id)}
-                    className="p-1 text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent"
-                    aria-label={`Delete ${p.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                  playlist={p}
+                  cloudTracks={cloudTracks}
+                  onPlay={() => playPlaylist(p)}
+                  onRemove={() => {
+                    plRemove(p.id);
+                    toast(`Deleted ${p.name}`, "info", "削除済み");
+                  }}
+                />
               ))}
               {playlists.length === 0 && (
-                <div className="font-mono py-3 text-[10px] tracking-[0.15em] text-dim">
-                  NO CLOUD PLAYLISTS — CREATE ONE, THEN RIGHT-CLICK A CLOUD TRACK TO ADD IT.
-                </div>
+                <p className="font-mono py-3 text-[10px] tracking-[0.15em] text-dim">
+                  NO CLOUD PLAYLISTS AVAILABLE.
+                </p>
               )}
             </div>
           </div>
@@ -381,34 +429,172 @@ export function CloudScreen() {
           </>
         ) : status === "ready" ? (
           <div className="py-14 text-center text-sm text-dim">
-            Cloud bucket is empty — hit <span style={{ color: "var(--ato-accent)" }}>SYNC LIBRARY UP</span> to upload.
+            Cloud bucket is empty: hit <span style={{ color: "var(--ato-accent)" }}>SYNC LIBRARY UP</span> to upload.
           </div>
         ) : null}
       </div>
 
-      {/* fixed-height streaming table */}
+      {/* fixed-height streaming table: kept low so the albums row above
+          isn't clipped mid-card (the scrollbar there is easy to miss) */}
       {status === "ready" && cloudTracks.length > 0 && (
-        <div className="flex h-[42vh] shrink-0 flex-col pt-2">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="flex items-baseline gap-3">
-              <h2 className="font-display text-sm font-bold tracking-[0.25em]">ALL CLOUD TRACKS</h2>
-              <span className="font-jp text-[10px] tracking-[0.3em] text-dim">ストリーミング</span>
-              <span className="h-px flex-1" style={{ background: "var(--ato-border)" }} />
+        <div className="mt-4 flex h-[30vh] shrink-0 flex-col pt-2">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex items-baseline gap-3">
+                <h2 className="font-display text-sm font-bold tracking-[0.25em]">ALL CLOUD TRACKS</h2>
+                <span className="font-jp text-[10px] tracking-[0.3em] text-dim">ストリーミング</span>
+              </div>
+              <span className="h-px w-6 shrink-0" style={{ background: "var(--ato-border)" }} />
+              <label
+                className="clip-tag flex min-w-0 max-w-[280px] flex-1 items-center gap-2 px-3 py-1.5"
+                style={{ border: "1px solid var(--ato-border)" }}
+              >
+                <Search className="h-3 w-3 shrink-0 text-dim" />
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="SEARCH ・ 検索…"
+                  className="font-mono w-full bg-transparent text-[10px] tracking-[0.15em] outline-none placeholder:text-dim"
+                />
+              </label>
             </div>
             <button
               onClick={() => {
                 fx.impact(1);
-                playQueue(cloudTracks, 0);
+                playQueue(visibleTracks, 0);
               }}
-              className="clip-tag font-mono px-4 py-1.5 text-[9px] tracking-[0.3em] text-dim hover:text-accent"
+              className="clip-tag font-mono shrink-0 px-4 py-1.5 text-[9px] tracking-[0.3em] text-dim hover:text-accent"
               style={{ background: "color-mix(in srgb, var(--ato-text) 6%, transparent)" }}
             >
               ▶ STREAM EVERYTHING
             </button>
           </div>
-          <VirtualTrackList tracks={cloudTracks} showAlbum className="min-h-0 flex-1" />
+          <VirtualTrackList tracks={visibleTracks} showAlbum className="min-h-0 flex-1" />
         </div>
       )}
+    </div>
+  );
+}
+
+/** One cloud playlist row: click to play, right-click for its own menu
+ *  (play/queue, inline rename, delete with confirm). */
+function CloudPlaylistRow({
+  playlist,
+  cloudTracks,
+  onPlay,
+  onRemove,
+}: {
+  playlist: CloudPlaylist;
+  cloudTracks: TrackMeta[];
+  onPlay: () => void;
+  onRemove: () => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [draft, setDraft] = useState(playlist.name);
+
+  const members = playlist.trackKeys
+    .map((k) => cloudTracks.find((t) => t.path === k))
+    .filter((t): t is TrackMeta => Boolean(t));
+
+  const commitRename = () => {
+    if (draft.trim() && draft !== playlist.name) useCloudPlaylists.getState().rename(playlist.id, draft);
+    setRenaming(false);
+  };
+
+  const deleteWithConfirm = () => {
+    void (async () => {
+      if (!(await confirm({ title: `DELETE ${playlist.name}?`, body: "The cloud playlist is removed for this account.", danger: true }))) return;
+      onRemove();
+    })();
+  };
+
+  const openMenu = (e: { preventDefault(): void; stopPropagation(): void; clientX: number; clientY: number }) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const { insertNext, addToQueue } = usePlayback.getState();
+    const items: ContextMenuItem[] = [
+      { label: "Play playlist", jp: "再生", run: onPlay },
+      ...(members.length > 0
+        ? [
+            {
+              label: "Play next",
+              jp: "次に再生",
+              run: () => {
+                for (const t of members) insertNext(t);
+                toast(`Next: ${members.length} from ${playlist.name}`, "info", "次に再生");
+              },
+            },
+            {
+              label: "Add to queue",
+              jp: "キューに追加",
+              run: () => {
+                for (const t of members) addToQueue(t);
+                toast(`Queued ${playlist.name}`, "info", "キューに追加");
+              },
+            },
+          ]
+        : []),
+      { divider: true, label: "" },
+      {
+        label: "Rename playlist",
+        jp: "改名",
+        run: () => {
+          setDraft(playlist.name);
+          setRenaming(true);
+        },
+      },
+      { label: "Delete playlist", jp: "削除", danger: true, run: deleteWithConfirm },
+    ];
+    showContextMenu(e, items);
+  };
+
+  return (
+    <div
+      className="group flex items-center gap-3 px-3 py-2.5"
+      style={{ borderBottom: "1px solid var(--ato-border)" }}
+      onContextMenu={openMenu}
+    >
+      <ListMusic className="h-4 w-4 shrink-0 text-dim" />
+      {renaming ? (
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && commitRename()}
+            className="font-mono min-w-0 flex-1 bg-transparent px-2 py-1 text-xs outline-none"
+            style={{ border: "1px solid var(--ato-border)" }}
+          />
+          <button
+            onClick={commitRename}
+            className="clip-tag p-1"
+            style={{ background: "color-mix(in srgb, var(--ato-accent) 14%, transparent)", color: "var(--ato-accent)" }}
+            aria-label="Save name"
+          >
+            <Check className="h-3 w-3" />
+          </button>
+          <button
+            onClick={() => setRenaming(false)}
+            className="clip-tag p-1"
+            style={{ background: "color-mix(in srgb, var(--ato-text) 6%, transparent)", color: "var(--ato-text-dim)" }}
+            aria-label="Cancel rename"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </span>
+      ) : (
+        <button onClick={onPlay} className="min-w-0 flex-1 text-left">
+          <span className="block truncate text-[13px] font-medium group-hover:text-accent">{playlist.name}</span>
+          <span className="font-mono block text-[10px] text-dim">{playlist.trackKeys.length} TRACKS</span>
+        </button>
+      )}
+      <button
+        onClick={deleteWithConfirm}
+        className="p-1 text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent"
+        aria-label={`Delete ${playlist.name}`}
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
     </div>
   );
 }

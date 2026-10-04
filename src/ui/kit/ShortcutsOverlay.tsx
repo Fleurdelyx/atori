@@ -9,11 +9,16 @@ const SHORTCUTS: { keys: string; label: string; jp: string }[] = [
   { keys: "N", label: "Next track", jp: "次の曲" },
   { keys: "P", label: "Previous track", jp: "前の曲" },
   { keys: "CTRL K", label: "Command palette", jp: "コマンド" },
+  { keys: "CTRL F / /", label: "Filter library", jp: "ライブラリ検索" },
+  { keys: "ALT ← / →", label: "Back / forward", jp: "戻る・進む" },
+  { keys: "MOUSE 4 / 5", label: "Back / forward (side buttons)", jp: "戻る・進む" },
+  { keys: "CTRL 1-4", label: "Jump to screen", jp: "画面切り替え" },
+  { keys: "CTRL R", label: "Rescan library", jp: "ライブラリ再スキャン" },
   { keys: "?", label: "This cheat sheet", jp: "ショートカット" },
-  { keys: "ESC", label: "Close overlays", jp: "閉じる" },
+  { keys: "ESC", label: "Close panels / Now Playing", jp: "閉じる" },
 ];
 
-/** "?" cheat sheet — every global keyboard shortcut in one overlay. */
+/** "?" cheat sheet: every global keyboard shortcut in one overlay. */
 export function ShortcutsOverlay() {
   const open = useUi((s) => s.shortcutsOpen);
   const setOpen = useUi((s) => s.setShortcutsOpen);

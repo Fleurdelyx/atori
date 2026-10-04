@@ -1,7 +1,7 @@
 import type { SkinDef } from "./types";
 
 /**
- * MINIMAL LIGHT — the quiet one with the lights on.
+ * MINIMAL LIGHT: the quiet one with the lights on.
  * Same Spotify-like calm as MINIMAL, tuned for bright rooms:
  * off-white base, darker green so text keeps contrast, near-flat shader.
  */

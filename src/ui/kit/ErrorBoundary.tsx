@@ -13,7 +13,7 @@ interface State {
 }
 
 /**
- * ErrorBoundary — a render crash shows a styled fallback (with the error)
+ * ErrorBoundary: a render crash shows a styled fallback (with the error)
  * instead of blanking the whole app. Remounts children when resetKey changes.
  */
 export class ErrorBoundary extends Component<Props, State> {

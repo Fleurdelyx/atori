@@ -5,7 +5,7 @@ import { CloudAuthError } from "./cloudService";
 import { useAuth } from "@/core/auth/authStore";
 
 /**
- * PlaylistStore — cloud playlists synced to the account. Track references are
+ * PlaylistStore: cloud playlists synced to the account. Track references are
  * R2 object keys (cloud tracks). Local (Dexie) playlists are a separate
  * concept and never merge with these.
  */

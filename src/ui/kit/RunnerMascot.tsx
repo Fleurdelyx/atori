@@ -10,23 +10,23 @@ import type { RunnerKind } from "@/state/uiStore";
  * A tiny articulated silhouette that runs along a seek bar, riding the song's
  * progress. Both characters are hand-built jointed SVG rigs: two-segment legs
  * with knee/hock bends, elbow bends, head bob and tail/ponytail lag.
- * Cadence is constant — audio only modulates amplitudes (stride swing via
+ * Cadence is constant: audio only modulates amplitudes (stride swing via
  * bass, body bob via monitor level), never velocity. Calm mode settles the
  * rig into a static neutral pose. Mounted inside a seek-bar container, feet
  * on the line.
  */
 
-/** Constant run cadence (rad/s) — horizontal pace is progress-linked, never audio-coupled. */
+/** Constant run cadence (rad/s): horizontal pace is progress-linked, never audio-coupled. */
 const CADENCE: Record<Exclude<RunnerKind, "off">, number> = { cat: 9.5, girl: 11 };
 
 function CatSvg() {
-  // Dynamic gallop silhouette — single accent fill, far limbs slightly recessed
+  // Dynamic gallop silhouette: single accent fill, far limbs slightly recessed
   return (
     <svg width={80} height={52} viewBox="0 0 80 52" aria-hidden>
       <ellipse cx={40} cy={49.4} rx={20} ry={1.7} fill="#000000" opacity={0.14} />
       <g fill="var(--ato-accent)">
         <g data-body>
-          {/* tail — streams straight back with a lifted curl */}
+          {/* tail: streams straight back with a lifted curl */}
           <g transform="translate(16,26)">
             <g data-limb="tail1">
               <path d="M0.5 -2.6 Q-8 -3.4 -11.5 0.2 Q-13.4 2.4 -11.8 3.2 Q-10 3.8 -8.6 2.2 Q-5 -1 0.9 0.8 Z" />
@@ -37,7 +37,7 @@ function CatSvg() {
               </g>
             </g>
           </g>
-          {/* far legs — extended in the gallop stretch */}
+          {/* far legs: extended in the gallop stretch */}
           <g transform="translate(24,30)" opacity={0.75}>
             <g data-limb="rt2">
               <path d="M-1.6 0 Q-1.9 4.6 -4.4 8.6 L-6.6 12.6 Q-7.3 14 -6 14.1 L-4.4 14 Q-5.2 11.6 -3.4 8.8 Q-0.4 4.8 1.4 0.4 Z" />
@@ -60,7 +60,7 @@ function CatSvg() {
           </g>
           {/* arched leaping body */}
           <path d="M16 24 Q18.5 17.6 27 16.6 L44 14.8 Q53.5 14 56.5 21.5 Q58 25.5 55.5 28.5 Q51 33.5 42 34.6 L26 36.4 Q18 37.2 15.5 32 Q14 28.6 16 24 Z" />
-          {/* head — swept ears, muzzle, charging forward */}
+          {/* head: swept ears, muzzle, charging forward */}
           <g data-limb="hd">
             <path d="M56.5 9.4 L60.4 15.6 L52.6 13.4 Z" />
             <path d="M63.6 7.2 L66.2 14 L58.9 13.2 Z" />
@@ -96,13 +96,13 @@ function CatSvg() {
 }
 
 function GirlSvg() {
-  // Dynamic silhouette runner — flowing twin-tails, deep forward lean, skirt flare
+  // Dynamic silhouette runner: flowing twin-tails, deep forward lean, skirt flare
   return (
     <svg width={64} height={84} viewBox="0 0 64 84" aria-hidden>
       <ellipse cx={32} cy={81.4} rx={14} ry={1.7} fill="#000000" opacity={0.14} />
       <g fill="var(--ato-accent)">
         <g data-body>
-          {/* far arm — extended back-down */}
+          {/* far arm: extended back-down */}
           <g transform="translate(35,42)" opacity={0.75}>
             <g data-limb="a2">
               <path d="M-1.7 -0.4 Q-5.4 1.6 -8.2 4.8 L-11.6 8.8 Q-12.6 10.1 -11.3 10.6 L-9.7 11 Q-10.1 9.4 -7.6 6.6 Q-4.2 2.8 -0.9 1.4 Z" />
@@ -113,7 +113,7 @@ function GirlSvg() {
               </g>
             </g>
           </g>
-          {/* far leg — trailing, toe pointed */}
+          {/* far leg: trailing, toe pointed */}
           <g transform="translate(28,60)" opacity={0.75}>
             <g data-limb="l2">
               <path d="M-1.9 -0.6 Q-5.6 3.6 -9.4 8.4 Q-11.4 10.9 -10.4 11.7 Q-9.5 12.3 -8 10.6 Q-4.4 6.4 0.9 2.4 Z" />
@@ -124,10 +124,10 @@ function GirlSvg() {
               </g>
             </g>
           </g>
-          {/* torso — deep forward lean from the waist */}
+          {/* torso: deep forward lean from the waist */}
           <g transform="translate(31,59)">
             <g data-limb="torso">
-              {/* twin-tails — ribbon masses with pointed strand splits, lag on both */}
+              {/* twin-tails: ribbon masses with pointed strand splits, lag on both */}
               <g transform="translate(7,-32)">
                 <g data-limb="pt1">
                   <path d="M1 -1.6 Q-6.8 -3.4 -13 -1.4 L-21.6 -7.6 L-14.8 -2.8 L-19 -1.8 L-12.6 1.4 Q-6 3.4 1.4 2 Z" />
@@ -140,7 +140,7 @@ function GirlSvg() {
               </g>
               {/* torso mass: neck wedge, chest curve down to the hip */}
               <path d="M4.6 -19.6 L9.6 -22.6 L10.4 -20 L2.2 -21.4 Q8.6 -20.8 10.8 -15.8 Q13 -10.4 10.6 -5.4 Q8.6 -1.6 4.4 -0.4 L-3.4 0.4 Q-1.8 -9.4 -0.2 -14.6 Q1.2 -18.8 2.2 -21.4 Z" />
-              {/* head — profile silhouette with nose, ahoge wisps */}
+              {/* head: profile silhouette with nose, ahoge wisps */}
               <g data-limb="hd">
                 <path d="M10.4 -31.8 Q12.4 -34.8 15.6 -35.4 Q13.8 -33.6 13.6 -31.4 Z" />
                 <path d="M8.8 -33.2 Q9.6 -36.4 12.6 -37.6 Q10.6 -35.2 11.2 -32.6 Z" />
@@ -150,13 +150,13 @@ function GirlSvg() {
               </g>
             </g>
           </g>
-          {/* skirt — pleated flare whipping back */}
+          {/* skirt: pleated flare whipping back */}
           <g transform="translate(30,58)">
             <g data-limb="skirt">
               <path d="M1.4 -2.6 Q-2.2 -2.4 -7.8 -0.6 L-11.4 9.6 Q-8.6 6.4 -7.4 8.8 Q-5.8 5.6 -4 7.6 Q-2.4 5.8 -0.4 7.2 Q1.2 -2.6 7.4 -1.4 Q5 -0.4 1.4 -2.6 Z" />
             </g>
           </g>
-          {/* near leg — knee drive */}
+          {/* near leg: knee drive */}
           <g transform="translate(33,60)">
             <g data-limb="l1">
               <path d="M-1.9 -0.6 Q6.2 -1.2 12.8 2.6 L11.4 5.4 Q5.4 2.6 -1.4 3.4 Z" />
@@ -168,7 +168,7 @@ function GirlSvg() {
               </g>
             </g>
           </g>
-          {/* near arm — fist pumped forward */}
+          {/* near arm: fist pumped forward */}
           <g transform="translate(38,41)">
             <g data-limb="a1">
               <path d="M-1.6 -0.8 Q3.6 1.4 7.6 5.6 L6 7.6 Q1.4 3.4 -2.2 1.4 Z" />

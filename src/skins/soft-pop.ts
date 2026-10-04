@@ -1,7 +1,7 @@
 import type { SkinDef } from "./types";
 
 /**
- * SOFT POP family — flat full-bleed color, centered art, gentle motion.
+ * SOFT POP family: flat full-bleed color, centered art, gentle motion.
  * Inspired by those anime-album mobile players: one solid color carries the
  * whole screen, white type floats on it, nothing glows, nothing slashes.
  * Four colorways: magenta (hero), crimson, warm gray, lavender.

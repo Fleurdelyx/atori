@@ -40,7 +40,7 @@ describe("pickSimilar", () => {
       track(2, { genre: ["Rock", "Live"], artist: "R", albumArtist: "R", album: "R-AL" }), // 1 shared tag = 2
       track(3, { genre: ["Rock", "Pop"], artist: "R", albumArtist: "R", album: "R-AL" }), // 2 shared tags = 4
       track(4, { artist: "A", albumArtist: "A", album: "OTHER", genre: ["Jazz"] }), // artist only = 1
-      track(5, { artist: "Z", albumArtist: "Z", album: "Z-AL", genre: ["Jazz"] }), // 0 — out
+      track(5, { artist: "Z", albumArtist: "Z", album: "Z-AL", genre: ["Jazz"] }), // 0: out
       track(6, { genre: ["Rock"], artist: "R", albumArtist: "R", album: "R-AL" }), // excluded as queued
     ];
     const picks = pickSimilar(seed, pool, new Set([6]), 10);

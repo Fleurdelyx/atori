@@ -2,7 +2,7 @@ import { lookup } from "node:dns/promises";
 
 /**
  * SSRF guard for user-supplied media URLs that the companion will fetch.
- * http/https only, public hosts only — localhost, loopback, private,
+ * http/https only, public hosts only: localhost, loopback, private,
  * link-local (incl. cloud metadata) and reserved ranges are rejected,
  * both as literals and after DNS resolution.
  */
@@ -29,7 +29,7 @@ function isPrivateV6(ip) {
   if (addr === "::" || addr === "::1") return true;
   const mappedDotted = addr.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
   if (mappedDotted) return isPrivateV4(mappedDotted[1]);
-  // WHATWG URL normalizes v4-mapped addresses to hex groups — e.g. ::ffff:a00:1
+  // WHATWG URL normalizes v4-mapped addresses to hex groups: e.g. ::ffff:a00:1
   const mappedHex = addr.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
   if (mappedHex) {
     const hi = parseInt(mappedHex[1], 16);
@@ -52,7 +52,7 @@ function isIpLiteral(host) {
 
 /**
  * Validate a media URL. Returns `{ url, hostname }` when safe to fetch,
- * otherwise `{ error }` — one of: invalid_url, bad_scheme, credentials,
+ * otherwise `{ error }`: one of: invalid_url, bad_scheme, credentials,
  * bad_host, private_host, dns_failed, dns_empty.
  */
 export async function validateMediaUrl(raw, lookupFn = lookup) {

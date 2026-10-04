@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Cloud, Download, Link2, ListMusic, Loader2, Search, X } from "lucide-react";
+import { Check, Cloud, Download, Link2, ListMusic, Loader2, X } from "lucide-react";
+import { MenuSelect } from "@/ui/kit/MenuSelect";
 import {
   companionDownload,
   companionHealth,
@@ -8,6 +9,7 @@ import {
   companionSearch,
   isHttpUrl,
   isSpotifyUrl,
+  type DownloadFormat,
   type RemoteHit,
 } from "@/core/remote/companion";
 import { authActive, useAuth } from "@/core/auth/authStore";
@@ -31,10 +33,18 @@ interface PlaylistJob {
   items: { title: string; url: string; status: "pending" | "active" | "done" | "failed" }[];
 }
 
+const FORMAT_OPTIONS: { value: DownloadFormat; label: string }[] = [
+  { value: "best", label: "BEST · ORIGINAL" },
+  { value: "mp3", label: "MP3" },
+  { value: "opus", label: "OPUS" },
+  { value: "wav", label: "WAV" },
+  { value: "mp4", label: "MP4 · 720P" },
+];
+
 /**
- * ADD URL panel — add songs from streaming links. Two paths:
+ * ADD URL panel: add songs from streaming links. Two paths:
  *  - signed in: the worker downloads server-side (Cobalt-compatible API)
- *    straight into the account library — works on phones / any browser.
+ *    straight into the account library: works on phones / any browser.
  *  - not signed in: the local yt-dlp companion (desktop convenience).
  */
 export function AddUrlPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -45,7 +55,7 @@ export function AddUrlPanel({ open, onClose }: { open: boolean; onClose: () => v
     ytdlp: null,
   });
   const inputRef = useRef<HTMLInputElement>(null);
-  const [asVideo, setAsVideo] = useState(false);
+  const [format, setFormat] = useState<DownloadFormat>("best");
   const [pl, setPl] = useState<PlaylistJob | null>(null);
   const busy = phase.kind === "downloading" || phase.kind === "searching";
 
@@ -62,82 +72,100 @@ export function AddUrlPanel({ open, onClose }: { open: boolean; onClose: () => v
   }, [open]);
 
   /** One track through either import path; resolves with its title. */
-  const importOne = async (url: string, video = false): Promise<string> => {
+  const importOne = async (url: string, format: DownloadFormat = "best"): Promise<string> => {
+    const viaCompanion = async (): Promise<string> => {
+      // companion path (desktop, yt-dlp local)
+      const { file, meta } = await companionDownload(url, format);
+      const artist = meta.artist.trim() || "Unknown";
+      const album = artist; // group channel downloads like singles
+      const res = await importWithOverrides(file, {
+        title: meta.title,
+        artist,
+        album,
+        duration: meta.duration,
+        format: meta.ext,
+      });
+      if (meta.thumbnail) {
+        // best effort: the file itself has no embedded art
+        void fetch(meta.thumbnail)
+          .then((r) => (r.ok ? r.blob() : null))
+          .then((blob) => (blob ? storeCover(coverKeyFor(album, artist), blob) : null))
+          .catch(() => {});
+      }
+      if (res.added + res.updated === 0 && res.skipped === 0) throw new Error("import failed");
+      toast(`Added ${meta.title} · ${artist}`, res.updated ? "info" : "success", "追加しました");
+      return meta.title;
+    };
+
     if (authActive()) {
-      // cloud path: the worker downloads server-side into the account library
-      const r = await remoteDownload(url);
-      const artist = r.artist.trim() || "Unknown";
-      const album = artist;
-      const coverKey = coverKeyFor(album, artist);
-      if (r.thumbnailUrl) {
-        // best-effort cover from the source thumbnail
-        try {
-          const res = await fetch(r.thumbnailUrl);
-          const blob = res.ok ? await res.blob() : null;
-          if (blob) await uploadCover(coverKey, blob);
-        } catch {
-          /* cover is optional */
+      // cloud path first: the worker downloads server-side into the account
+      // library: works on any device. When the worker's downloader isn't
+      // configured (DL_BASE) or unreachable, fall back to the local
+      // companion so desktop users never hit a dead end.
+      try {
+        const r = await remoteDownload(url, format);
+        const artist = r.artist.trim() || "Unknown";
+        const album = artist;
+        const coverKey = coverKeyFor(album, artist);
+        if (r.thumbnailUrl) {
+          // best-effort cover from the source thumbnail
+          try {
+            const res = await fetch(r.thumbnailUrl);
+            const blob = res.ok ? await res.blob() : null;
+            if (blob) await uploadCover(coverKey, blob);
+          } catch {
+            /* cover is optional */
+          }
         }
-      }
-      const duration = await probeDuration(streamUrlFor(r.key));
-      const manifest = await fetchManifest();
-      if (!manifest.tracks.some((t) => t.key === r.key)) {
-        manifest.tracks.push({
-          key: r.key,
-          coverKey: r.thumbnailUrl ? coverKey : null,
-          lyrics: null,
-          title: r.title,
-          artist,
-          artists: [artist],
-          album,
-          albumArtist: artist,
-          trackNo: null,
-          discNo: null,
-          year: null,
-          genre: [],
-          duration: duration ?? 0,
-          format: r.ext,
-          bitrate: null,
-          sampleRate: null,
-          bitDepth: null,
-          lossless: false,
-          size: 0,
+        const duration = await probeDuration(streamUrlFor(r.key));
+        // read-modify-write under the manifest lock: a concurrent sync or a
+        // second tab would otherwise drop this add or another writer's tracks
+        const { withManifestLock } = await import("@/core/cloud/cloudService");
+        await withManifestLock(async () => {
+          const manifest = await fetchManifest();
+          if (manifest.tracks.some((t) => t.key === r.key)) return;
+          manifest.tracks.push({
+            key: r.key,
+            coverKey: r.thumbnailUrl ? coverKey : null,
+            lyrics: null,
+            title: r.title,
+            artist,
+            artists: [artist],
+            album,
+            albumArtist: artist,
+            trackNo: null,
+            discNo: null,
+            year: null,
+            genre: [],
+            duration: duration ?? 0,
+            format: r.ext,
+            bitrate: null,
+            sampleRate: null,
+            bitDepth: null,
+            lossless: false,
+            size: 0,
+          });
+          const { putManifest } = await import("@/core/cloud/cloudService");
+          await putManifest(manifest);
         });
-        const { putManifest } = await import("@/core/cloud/cloudService");
-        await putManifest(manifest);
+        await useCloud.getState().refresh();
+        toast(`Added ${r.title} to your cloud library`, "success", "クラウドに追加");
+        return r.title;
+      } catch (e) {
+        // no local fallback when the companion isn't running; when it is,
+        // switch over silently so the add just works
+        if (!companion.online) throw e;
+        return viaCompanion();
       }
-      await useCloud.getState().refresh();
-      toast(`Added ${r.title} to your cloud library`, "success", "クラウドに追加");
-      return r.title;
     }
 
-    // companion path (desktop, yt-dlp local)
-    const { file, meta } = await companionDownload(url, video);
-    const artist = meta.artist.trim() || "Unknown";
-    const album = artist; // group channel downloads like singles
-    const res = await importWithOverrides(file, {
-      title: meta.title,
-      artist,
-      album,
-      duration: meta.duration,
-      format: meta.ext,
-    });
-    if (meta.thumbnail) {
-      // best effort — the file itself has no embedded art
-      void fetch(meta.thumbnail)
-        .then((r) => (r.ok ? r.blob() : null))
-        .then((blob) => (blob ? storeCover(coverKeyFor(album, artist), blob) : null))
-        .catch(() => {});
-    }
-    if (res.added + res.updated === 0 && res.skipped === 0) throw new Error("import failed");
-    toast(`Added ${meta.title} — ${artist}`, res.updated ? "info" : "success", "追加しました");
-    return meta.title;
+    return viaCompanion();
   };
 
-  const download = async (url: string, video = false) => {
-    setPhase({ kind: "downloading", label: video ? "DOWNLOADING VIDEO — 動画ダウンロード中" : "DOWNLOADING — ダウンロード中" });
+  const download = async (url: string, fmt: DownloadFormat = "best") => {
+    setPhase({ kind: "downloading", label: fmt === "mp4" ? "DOWNLOADING VIDEO · 動画ダウンロード中" : "DOWNLOADING · ダウンロード中" });
     try {
-      await importOne(url, video);
+      await importOne(url, fmt);
       onClose();
     } catch (e) {
       setPhase({ kind: "error", message: e instanceof Error ? e.message : "download failed" });
@@ -170,34 +198,45 @@ export function AddUrlPanel({ open, onClose }: { open: boolean; onClose: () => v
         }
       }
       toast(
-        failed === 0 ? "Playlist imported" : `Playlist import finished — ${failed} failed`,
+        failed === 0 ? "Playlist imported" : `Playlist import finished: ${failed} failed`,
         failed === 0 ? "success" : "error",
         "プレイリスト取り込み",
       );
     } catch (e) {
-      setPhase({ kind: "error", message: e instanceof Error ? e.message : "playlist expansion failed" });
+      setPhase({
+        kind: "error",
+        message: !companion.online
+          ? "Playlist import runs on the desktop companion: start it with npm run companion, or paste single-track links"
+          : e instanceof Error
+            ? e.message
+            : "playlist expansion failed",
+        jp: !companion.online ? "プレイリスト取り込みにはコンパニオンが必要です" : undefined,
+      });
     }
   };
 
-  const submit = async () => {
-    const q = input.trim();
+  const submit = async (override?: string) => {
+    const q = (override ?? input).trim();
     if (!q || busy) return;
     if (isHttpUrl(q)) {
       if (isSpotifyUrl(q)) {
         setPhase({
           kind: "error",
           message:
-            "Spotify is DRM-protected and cannot be downloaded — find the track on YouTube and paste that link",
+            "Spotify is DRM-protected and cannot be downloaded: find the track on YouTube and paste that link",
           jp: "SpotifyはDRM保護のためダウンロードできません",
         });
         return;
       }
-      // playlist URLs expand into a batch import; everything else downloads solo
-      if (/list=|\/playlist\//.test(q)) {
+      // a playlist page URL expands into a batch import. A watch URL that
+      // merely carries &list= (mixes, radio, "next in playlist") is one song:
+      // downloads pass --no-playlist, so the video wins and the list stays out
+      const isPlaylistPage = /\/playlist\//.test(q) || (!/[?&]v=/.test(q) && /[?&]list=/.test(q));
+      if (isPlaylistPage) {
         await importPlaylist(q);
         return;
       }
-      await download(q, asVideo);
+      await download(q, format);
       return;
     }
     setPhase({ kind: "searching" });
@@ -244,10 +283,26 @@ export function AddUrlPanel({ open, onClose }: { open: boolean; onClose: () => v
                   if (e.key === "Enter") void submit();
                   else if (e.key === "Escape") onClose();
                 }}
+                onPaste={(e) => {
+                  const text = e.clipboardData.getData("text").trim();
+                  if (!text || busy) return;
+                  e.preventDefault();
+                  setInput(text);
+                  void submit(text);
+                }}
                 placeholder="Paste a link, or search YouTube…"
                 className="font-mono flex-1 bg-transparent text-sm outline-none placeholder:text-dim"
                 disabled={busy}
               />
+              <button
+                onClick={() => void submit()}
+                disabled={busy || !input.trim()}
+                className="clip-tag shrink-0 px-3 py-1.5 transition-opacity disabled:opacity-40"
+                style={{ background: "var(--ato-accent)", color: "var(--ato-bg)" }}
+                aria-label="Add link or search"
+              >
+                <span className="font-mono text-[9px] font-bold tracking-[0.2em]">ENTER</span>
+              </button>
               <span className="font-mono text-[9px] tracking-[0.2em] text-dim">ESC</span>
             </div>
 
@@ -255,14 +310,14 @@ export function AddUrlPanel({ open, onClose }: { open: boolean; onClose: () => v
               {phase.kind === "idle" && (
                 <p className="font-mono px-1 py-3 text-[10px] leading-relaxed tracking-[0.15em] text-dim">
                   <Link2 className="mr-2 inline h-3.5 w-3.5" />
-                  PASTE A YOUTUBE / SOUNDCLOUD / BANDCAMP LINK — OR TYPE TO SEARCH YOUTUBE.
+                  PASTE A YOUTUBE / SOUNDCLOUD / BANDCAMP LINK, OR TYPE TO SEARCH YOUTUBE.
                   <br />
                   SPOTIFY IS DRM-PROTECTED AND CANNOT BE DOWNLOADED.
                 </p>
               )}
               {phase.kind === "searching" && (
                 <p className="flex items-center gap-2 px-1 py-3 text-sm text-dim">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Searching — 検索中…
+                  <Loader2 className="h-4 w-4 animate-spin" /> Searching · 検索中…
                 </p>
               )}
               {phase.kind === "downloading" && (
@@ -316,12 +371,12 @@ export function AddUrlPanel({ open, onClose }: { open: boolean; onClose: () => v
                   {phase.jp && <p className="font-jp mt-1 text-[11px] text-dim">{phase.jp}</p>}
                   {!authActive() && !companion.online && (
                     <p className="font-mono mt-3 text-[10px] tracking-[0.15em] text-dim">
-                      COMPANION OFFLINE — RUN <span style={{ color: "var(--ato-accent)" }}>npm run companion</span> IN THE PROJECT FOLDER
+                      COMPANION OFFLINE: RUN <span style={{ color: "var(--ato-accent)" }}>npm run companion</span> IN THE PROJECT FOLDER
                     </p>
                   )}
                   {!authActive() && companion.online && !companion.ytdlp && (
                     <p className="font-mono mt-3 text-[10px] tracking-[0.15em] text-dim">
-                      yt-dlp NOT FOUND — INSTALL WITH <span style={{ color: "var(--ato-accent)" }}>pip install yt-dlp</span>
+                      yt-dlp NOT FOUND: INSTALL WITH <span style={{ color: "var(--ato-accent)" }}>pip install yt-dlp</span>
                     </p>
                   )}
                 </div>
@@ -343,11 +398,11 @@ export function AddUrlPanel({ open, onClose }: { open: boolean; onClose: () => v
                         <span className="block truncate text-[13px] font-medium">{hit.title}</span>
                         <span className="font-mono block truncate text-[10px] text-dim">
                           {hit.uploader}
-                          {hit.duration != null ? ` — ${formatTime(hit.duration)}` : ""}
+                          {hit.duration != null ? ` · ${formatTime(hit.duration)}` : ""}
                         </span>
                       </span>
                       <button
-                        onClick={() => void download(hit.url)}
+                        onClick={() => void download(hit.url, format)}
                         disabled={busy}
                         className="clip-tag flex shrink-0 items-center gap-2 px-3 py-1.5 disabled:opacity-40"
                         style={{
@@ -366,38 +421,23 @@ export function AddUrlPanel({ open, onClose }: { open: boolean; onClose: () => v
             </div>
 
             <div className="font-mono flex items-center justify-between border-t border-line px-5 py-3 text-[9px] tracking-[0.2em] text-dim">
-              {!authActive() && (
-                <button
-                  onClick={() => setAsVideo(!asVideo)}
-                  className="font-mono flex items-center gap-2 text-[9px] tracking-[0.2em] transition-colors"
-                  style={{ color: asVideo ? "var(--ato-accent)" : undefined }}
-                  title="Download a 720p mp4 instead of audio-only (needs ffmpeg on this machine)"
-                >
-                  <span
-                    className="inline-flex h-3.5 w-3.5 items-center justify-center"
-                    style={{
-                      border: `1px solid ${asVideo ? "var(--ato-accent)" : "var(--ato-border)"}`,
-                      borderRadius: "var(--ato-radius)",
-                      background: asVideo ? "var(--ato-accent)" : "transparent",
-                      color: "var(--ato-bg)",
-                    }}
-                  >
-                    {asVideo && <Check className="h-2.5 w-2.5" />}
-                  </span>
-                  AS VIDEO 720P
-                </button>
-              )}
+              <span title="Target format: transcoded formats need ffmpeg where the download runs">
+                <MenuSelect
+                  value={format}
+                  options={FORMAT_OPTIONS}
+                  onChange={(v) => setFormat(v as DownloadFormat)}
+                  placeholder="FORMAT"
+                  ariaLabel="Download format"
+                />
+              </span>
               <span>
                 {authActive()
-                  ? "CLOUD DOWNLOADER ✓ — ADDS TO YOUR ACCOUNT"
+                  ? "CLOUD DOWNLOADER ✓: ADDS TO YOUR ACCOUNT"
                   : companion.online
                     ? companion.ytdlp
                       ? `COMPANION ✓ yt-dlp ${companion.ytdlp}`
-                      : "COMPANION ✓ — yt-dlp MISSING"
-                    : "COMPANION OFFLINE — npm run companion"}
-              </span>
-              <span className="flex items-center gap-1">
-                <Search className="h-3 w-3" /> ENTER
+                      : "COMPANION ✓: yt-dlp MISSING"
+                    : "COMPANION OFFLINE: npm run companion"}
               </span>
             </div>
           </motion.div>

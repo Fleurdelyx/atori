@@ -6,7 +6,9 @@ import { wireCloud } from "@/core/cloud/cloudStore";
 import { primePlaylistCache } from "@/core/library/playlists";
 import { engine } from "@/core/audio/AudioEngine";
 import { usePlayback, saveLastTrack, setCloudResumePush, readQueueState, saveQueueNow } from "@/core/audio/playbackStore";
-import { fetchResume, putResume, type ResumeState } from "@/core/cloud/cloudService";
+import { fetchResume, putResume, cloudConfigured, type ResumeState } from "@/core/cloud/cloudService";
+import { useCloud } from "@/core/cloud/cloudStore";
+import { useAuth } from "@/core/auth/authStore";
 import { checkForUpdates } from "@/core/shell/updater";
 import { useUi } from "@/state/uiStore";
 import type { TrackMeta } from "@/core/library/types";
@@ -15,6 +17,29 @@ import type { TrackMeta } from "@/core/library/types";
 wireEngine();
 wireCloud();
 primePlaylistCache();
+
+// Cloud-first library: pull the manifest at boot so Home/Library/search show
+// the streamed library without visiting the Cloud screen first. The shared
+// catalogue pulls independently — it works signed out too.
+import("@/core/cloud/cloudService").then(({ catalogueReady }) => {
+  if (catalogueReady()) {
+    void import("@/core/cloud/catalogueStore").then((m) => m.useCatalogue.getState().refresh());
+    void import("@/core/cloud/cataloguePlaylistStore").then((m) => m.useCataloguePlaylists.getState().pull());
+  }
+});
+if (cloudConfigured()) {
+  void useCloud.getState().refresh();
+  // refresh the persisted user so freshly granted flags (catalogue admin)
+  // show up without waiting for the next login
+  const a = useAuth.getState();
+  if (a.sessionToken) {
+    void import("@/core/auth/authService").then(({ me }) =>
+      me(a.serverUrl, a.sessionToken!).then((u) => {
+        if (u) useAuth.getState().setSession(a.sessionToken, u);
+      }),
+    );
+  }
+}
 
 // Restore persisted EQ onto the engine (applies on graph creation too)
 const ui = useUi.getState();
@@ -27,7 +52,9 @@ engine.setShuffle(localStorage.getItem("atori:shuffle") === "1");
 const savedRepeat = localStorage.getItem("atori:repeat");
 if (savedRepeat === "all" || savedRepeat === "one") engine.setRepeat(savedRepeat);
 
-// Restore persisted volume + last played track (paused — autoplay is blocked anyway)
+// Restore persisted volume + the last playing track: the app reopens paused
+// on that song, queued from its start; the old session's queue does not carry
+// over. Autoplay is blocked at boot anyway.
 const savedVolumeRaw = localStorage.getItem("atori:volume");
 if (savedVolumeRaw != null) {
   const savedVolume = Number(savedVolumeRaw);
@@ -58,6 +85,9 @@ async function usableHere(entry: ResumeEntry): Promise<{ track: TrackMeta; pos: 
 }
 
 async function restoreLastTrack() {
+  // if the user already started playing while the cloud snapshot was in
+  // flight, never clobber their live queue with the stale saved one
+  if (engine.queue.length > 0) return;
   const local = readLocalResume();
   // race the cloud snapshot (3s cap) so the boot animation covers the wait
   const cloud = await Promise.race([
@@ -65,29 +95,26 @@ async function restoreLastTrack() {
     new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
   ]);
   const savedQueue = readQueueState();
-  const candidates: { entry: ResumeEntry; queue?: { queue: TrackMeta[]; index: number } }[] = [
-    cloud ? { entry: cloud } : null,
+  // only the track identity carries across sessions: the app reopens paused
+  // on the last song, queued from its start, with a fresh queue
+  const candidates: ResumeEntry[] = [
+    cloud,
     savedQueue
       ? {
-          entry: {
-            track: savedQueue.queue[Math.min(savedQueue.index, savedQueue.queue.length - 1)],
-            pos: savedQueue.pos,
-            savedAt: savedQueue.savedAt,
-          },
-          queue: { queue: savedQueue.queue, index: savedQueue.index },
+          track: savedQueue.queue[Math.min(savedQueue.index, savedQueue.queue.length - 1)],
+          pos: 0,
+          savedAt: savedQueue.savedAt,
         }
       : null,
-    local ? { entry: local } : null,
-  ].filter((c): c is { entry: ResumeEntry; queue?: { queue: TrackMeta[]; index: number } } => !!c?.entry.track);
-  candidates.sort((a, b) => b.entry.savedAt - a.entry.savedAt);
-  for (const { entry, queue } of candidates) {
+    local ? { ...local, pos: 0 } : null,
+  ]
+    .filter((c): c is ResumeEntry => !!c?.track)
+    .sort((a, b) => b.savedAt - a.savedAt);
+  for (const entry of candidates) {
+    if (engine.queue.length > 0) return;
     const usable = await usableHere(entry);
     if (!usable) continue;
-    if (queue && queue.queue[queue.index]?.id === usable.track.id) {
-      engine.restoreQueue(queue.queue, queue.index, entry.pos);
-    } else {
-      engine.restoreTrack(usable.track, entry.pos);
-    }
+    engine.restoreTrack(usable.track, 0);
     return;
   }
 }
@@ -104,7 +131,7 @@ function readLocalResume(): ResumeEntry | null {
       savedAt: typeof parsed.savedAt === "number" ? parsed.savedAt : 1,
     };
   } catch {
-    return null; // corrupted value — skip restore
+    return null; // corrupted value: skip restore
   }
 }
 
@@ -129,7 +156,7 @@ if (import.meta.env.DEV) {
   }
 }
 
-// PWA — installable + offline app shell (browser prod only; never in Tauri,
+// PWA: installable + offline app shell (browser prod only; never in Tauri,
 // where the shell serves via its own protocol, and never in dev HMR)
 if (
   import.meta.env.PROD &&
@@ -138,12 +165,12 @@ if (
 ) {
   window.addEventListener("load", () => {
     void navigator.serviceWorker.register("/sw.js").catch(() => {
-      // offline shell is a progressive enhancement — ignore failures
+      // offline shell is a progressive enhancement: ignore failures
     });
   });
 }
 
-// Desktop shell auto-updater — one passive check per launch (no-op in browser)
+// Desktop shell auto-updater: one passive check per launch (no-op in browser)
 window.addEventListener("load", () => {
   void checkForUpdates();
 });

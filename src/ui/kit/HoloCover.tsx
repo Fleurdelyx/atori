@@ -5,8 +5,8 @@ import { loadCoverUrl } from "@/core/library/coverCache";
 import type { Grade } from "@/skins/types";
 
 /**
- * HoloCover — album art tile with holographic foil sweep (CSS),
- * initial-letter placeholder and optional motion shared-layout id
+ * HoloCover: album art tile with holographic foil sweep (CSS), a disc-only
+ * placeholder when no cover exists, and optional motion shared-layout id
  * (mini player ↔ Now Playing morph).
  */
 export function HoloCover({
@@ -35,8 +35,6 @@ export function HoloCover({
     };
   }, [coverKey]);
 
-  const initial = title?.trim()?.[0]?.toUpperCase() ?? "♪";
-
   return (
     <motion.div
       layoutId={layoutId}
@@ -47,14 +45,13 @@ export function HoloCover({
         <img src={url} alt={title} className="h-full w-full object-cover" draggable={false} />
       ) : (
         <div
-          className="flex h-full w-full flex-col items-center justify-center gap-1"
+          className="flex h-full w-full items-center justify-center"
           style={{
             background:
               "linear-gradient(135deg, color-mix(in srgb, var(--ato-accent) 22%, transparent), color-mix(in srgb, var(--ato-accent-2) 18%, transparent))",
           }}
         >
-          <Disc3 className="h-1/4 w-1/4 text-dim" strokeWidth={1.5} />
-          <span className="font-display text-2xl font-bold text-dim">{initial}</span>
+          <Disc3 className="h-1/3 w-1/3 text-dim" strokeWidth={1.5} />
         </div>
       )}
       {grade === "SSR" && (

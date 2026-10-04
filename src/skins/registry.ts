@@ -6,6 +6,7 @@ import { godEater } from "./god-eater";
 import { minimal } from "./minimal";
 import { minimalLight } from "./minimal-light";
 import { softPop, softPopRed, softPopGray, softPopLavender } from "./soft-pop";
+import { softPinkDark } from "./soft-pink";
 import type { FxQuality, SkinDef } from "./types";
 
 export type { FxQuality, Grade, SkinDef } from "./types";
@@ -22,6 +23,7 @@ export const SKINS: SkinDef[] = [
   softPopRed,
   softPopGray,
   softPopLavender,
+  softPinkDark,
 ];
 
 export const DEFAULT_SKIN_ID = neonGacha.id;
@@ -47,7 +49,7 @@ export function qualityDprCap(q: FxQuality): number {
   }
 }
 
-/** Uniform scalar fed to shaders — lets skins drop expensive branches. */
+/** Uniform scalar fed to shaders: lets skins drop expensive branches. */
 export function qualityScalar(q: FxQuality): number {
   switch (q) {
     case "ultra":

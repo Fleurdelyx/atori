@@ -1,8 +1,8 @@
 /**
- * AudioLevels — single FFT tap over the AudioEngine's AnalyserNode.
+ * AudioLevels: single FFT tap over the AudioEngine's AnalyserNode.
  * Computes 32 log-spaced bands + bass/mid/treble/level envelopes,
  * smoothed with punchy decay. Consumers poll these values inside
- * their own rAF loops — never through React state.
+ * their own rAF loops: never through React state.
  */
 class AudioLevels {
   analyser: AnalyserNode | null = null;
@@ -32,7 +32,7 @@ class AudioLevels {
   }
 
   /**
-   * Median RMS over a sampling window (ms) — used by smart volume to learn a
+   * Median RMS over a sampling window (ms): used by smart volume to learn a
    * track's loudness. Time-domain (post-EQ), sampled on the poll interval.
    */
   async sampleRms(ms = 3000): Promise<number | null> {

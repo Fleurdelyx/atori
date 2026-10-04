@@ -1,7 +1,7 @@
 import type { SkinDef } from "./types";
 
 /**
- * MINIMAL — calm Spotify-dark mode for work.
+ * MINIMAL: calm Spotify-dark mode for work.
  * Near-flat #121212 base, green accent, rounded corners, no grain,
  * barely-there ambient haze. The quiet one.
  */

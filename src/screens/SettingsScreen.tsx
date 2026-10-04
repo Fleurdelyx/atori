@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Cloud, Shield } from "lucide-react";
+import { Check, Cloud, Palette, Shield } from "lucide-react";
 import { useUi } from "@/state/uiStore";
 import { SKINS, EQ_APPLIED_LABEL } from "@/skins/registry";
 import { useSkin } from "@/skins/SkinProvider";
+import { ScrollFade } from "@/ui/kit/ScrollFade";
+import { MenuSelect } from "@/ui/kit/MenuSelect";
 import { engine, EQ_FREQS } from "@/core/audio/AudioEngine";
 import { fx } from "@/fx/FxDirector";
 import type { FxQuality } from "@/skins/types";
@@ -12,9 +14,12 @@ import { useAuth } from "@/core/auth/authStore";
 import { logout } from "@/core/auth/authService";
 import { clearCoverCache } from "@/core/library/coverCache";
 import { toast } from "@/state/toastStore";
+import { confirm } from "@/state/confirmStore";
 import { BG_STYLES } from "@/fx/bgStyles";
-import { useAllTracks } from "@/core/library/useLibrary";
-import { findDuplicates } from "@/core/library/duplicates";
+import { useAllTracks, useWrapped } from "@/core/library/useLibrary";
+import { findDuplicates, type DuplicateGroup } from "@/core/library/duplicates";
+import { cloudConfigured } from "@/core/cloud/cloudService";
+import { AccountPanel } from "@/ui/kit/AccountPanel";
 import { buildBackup, downloadBackup, restoreBackup } from "@/core/library/backup";
 import { db } from "@/core/library/db";
 
@@ -79,7 +84,7 @@ function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
   );
 }
 
-/** ACCOUNT — sign in / register on an atori-cloud worker (accounts mode). */
+/** ACCOUNT: sign in / register on an atori-cloud worker (accounts mode). */
 function CloudAccountSection() {
   const serverUrl = useAuth((s) => s.serverUrl);
   const setServerUrl = useAuth((s) => s.setServerUrl);
@@ -87,6 +92,8 @@ function CloudAccountSection() {
   const sessionExpired = useAuth((s) => s.sessionExpired);
   const setAuthOpen = useAuth((s) => s.setAuthOpen);
   const setAuthMode = useAuth((s) => s.setAuthMode);
+  const w = useWrapped();
+  const [accountPanel, setAccountPanel] = useState(false);
 
   const signOut = async () => {
     const a = useAuth.getState();
@@ -101,31 +108,60 @@ function CloudAccountSection() {
   const urlOk = normalizeCloudUrl(serverUrl) !== null;
 
   return (
-    <div className="clip-notch bg-panel p-5 backdrop-blur-md" style={{ border: "1px solid var(--ato-border)" }}>
-      <div className="mb-4 flex items-center gap-3">
-        <Cloud className="h-5 w-5" style={{ color: user ? "var(--ato-accent-2)" : "var(--ato-text-dim)" }} />
-        <div>
-          <div className="text-sm font-semibold">ACCOUNT アカウント</div>
-          <div className="font-mono text-[9px] tracking-[0.2em] text-dim">
-            HOST YOUR LIBRARY — STREAM IT ON ANY DEVICE
+    <>
+      <div className="clip-notch bg-panel p-5 backdrop-blur-md" style={{ border: "1px solid var(--ato-border)" }}>
+        <div className="mb-4 flex items-center gap-3">
+          <Cloud className="h-5 w-5" style={{ color: user ? "var(--ato-accent-2)" : "var(--ato-text-dim)" }} />
+          <div>
+            <div className="text-sm font-semibold">ACCOUNT アカウント</div>
+            <div className="font-mono text-[9px] tracking-[0.2em] text-dim">
+              HOST YOUR LIBRARY
+            </div>
           </div>
         </div>
-      </div>
 
       {user ? (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold">{user.name}</div>
-            <div className="font-mono truncate text-[10px] text-dim">{user.email}</div>
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold">{user.name}</div>
+              <div className="font-mono truncate text-[10px] text-dim">{user.email}</div>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <button
+                onClick={() => setAccountPanel(true)}
+                className="clip-tag px-4 py-2"
+                style={{ background: "color-mix(in srgb, var(--ato-accent) 14%, transparent)", color: "var(--ato-accent)" }}
+              >
+                <span className="font-mono text-[10px] font-bold tracking-[0.3em]">ACCOUNT SETTINGS</span>
+              </button>
+              <button
+                onClick={() => void signOut()}
+                className="clip-tag px-5 py-2"
+                style={{ background: "color-mix(in srgb, var(--ato-text) 6%, transparent)", color: "var(--ato-text-dim)" }}
+              >
+                <span className="font-mono text-[10px] font-bold tracking-[0.3em]">SIGN OUT</span>
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => void signOut()}
-            className="clip-tag font-mono px-5 py-2 text-[10px] font-bold tracking-[0.3em]"
-            style={{ background: "color-mix(in srgb, var(--ato-text) 6%, transparent)", color: "var(--ato-text-dim)" }}
-          >
-            SIGN OUT
-          </button>
-        </div>
+
+          {/* listening stats, from the local play log (cloud streams included) */}
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { label: "MINUTES 分", value: w.minutes.toLocaleString() },
+              { label: "PLAYS 再生", value: w.plays.toLocaleString() },
+              { label: "TRACKS 曲", value: w.uniqueTracks.toLocaleString() },
+              { label: "TOP ARTIST", value: w.topArtists[0]?.name ?? "none" },
+            ].map((s) => (
+              <div key={s.label} className="clip-notch px-3 py-2.5 text-center" style={{ background: "color-mix(in srgb, var(--ato-accent) 8%, transparent)" }}>
+                <div className="truncate font-display text-lg font-bold" style={{ color: "var(--ato-accent)" }} title={s.value}>
+                  {s.value}
+                </div>
+                <div className="font-mono mt-0.5 text-[8px] tracking-[0.25em] text-dim">{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </>
       ) : (
         <>
           <label className="mb-3 block">
@@ -140,7 +176,7 @@ function CloudAccountSection() {
           </label>
           {sessionExpired && (
             <p className="font-mono mb-3 text-[10px] tracking-[0.15em]" style={{ color: "var(--ato-danger)" }}>
-              SESSION EXPIRED — SIGN IN AGAIN
+              SESSION EXPIRED: SIGN IN AGAIN
             </p>
           )}
           <div className="flex flex-wrap gap-2">
@@ -169,7 +205,16 @@ function CloudAccountSection() {
           </div>
         </>
       )}
-    </div>
+      </div>
+
+      {/* the panel lives OUTSIDE the clip-notch card: clip-path would clip the
+          fixed-position modal to the card's box */}
+      <AccountPanel
+        open={accountPanel}
+        onClose={() => setAccountPanel(false)}
+        onUser={(u) => useAuth.getState().setSession(useAuth.getState().sessionToken, u)}
+      />
+    </>
   );
 }
 
@@ -201,7 +246,7 @@ function CloudSection() {
         <div className="mb-4 flex items-center gap-3">
           <Cloud className="h-5 w-5" style={{ color: connected ? "var(--ato-accent-2)" : "var(--ato-text-dim)" }} />
           <div>
-            <div className="text-sm font-semibold">LEGACY — SHARED TOKEN (SELF-HOST)</div>
+            <div className="text-sm font-semibold">LEGACY: SHARED TOKEN (SELF-HOST)</div>
           </div>
         </div>
       <label className="mb-3 block">
@@ -261,6 +306,7 @@ function CloudSection() {
 
 export function SettingsScreen() {
   const skinId = useUi((s) => s.skinId);
+  const accentOverride = useUi((s) => s.accentOverride);
   const setSkin = useUi((s) => s.setSkin);
   const bgStyle = useUi((s) => s.bgStyle);
   const setBgStyle = useUi((s) => s.setBgStyle);
@@ -282,6 +328,8 @@ export function SettingsScreen() {
   const setSmartVolume = useUi((s) => s.setSmartVolume);
   const sleepEndsAt = useUi((s) => s.sleepEndsAt);
   const setSleepEndsAt = useUi((s) => s.setSleepEndsAt);
+  const [sleepH, setSleepH] = useState("");
+  const [sleepM, setSleepM] = useState("");
   const skin = useSkin();
   const displayName = useUi((s) => s.displayName);
   const setDisplayName = useUi((s) => s.setDisplayName);
@@ -304,7 +352,7 @@ export function SettingsScreen() {
   }, [smartVolume]);
 
   return (
-    <div className="mx-auto h-full max-w-3xl overflow-y-auto px-8 py-7">
+    <ScrollFade className="mx-auto h-full max-w-3xl overflow-y-auto px-8 py-7">
       <header className="mb-8">
         <div className="font-mono text-[10px] tracking-[0.35em] text-dim">SYSTEM CONFIG</div>
         <h1 className="font-display mt-1 text-3xl font-bold tracking-wide">
@@ -326,43 +374,43 @@ export function SettingsScreen() {
             style={{ border: "1px solid var(--ato-border)" }}
           />
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {SKINS.map((s) => {
-            const active = s.id === skinId;
-            return (
-              <button
-                key={s.id}
-                onClick={() => {
-                  setSkin(s.id);
-                  fx.wipe(1);
-                }}
-                className="clip-notch relative overflow-hidden p-4 text-left backdrop-blur-md"
-                style={{
-                  background: "var(--ato-panel)",
-                  border: active
-                    ? "1px solid var(--ato-accent)"
-                    : "1px solid var(--ato-border)",
-                  boxShadow: active
-                    ? "0 0 24px color-mix(in srgb, var(--ato-accent) 30%, transparent)"
-                    : undefined,
-                }}
-              >
-                <div className="h-14 w-full" style={{ background: s.swatch, borderRadius: "var(--ato-radius)" }} />
-                <div className="font-display mt-3 text-sm font-bold tracking-widest">{s.name}</div>
-                <div className="font-jp text-[10px] text-dim">{s.nameJp}</div>
-                <div className="font-mono mt-1 text-[9px] tracking-wider text-dim">{s.tagline}</div>
-                {active && (
-                  <Check
-                    className="absolute top-3 right-3 h-4 w-4"
-                    style={{ color: "var(--ato-accent)" }}
-                  />
-                )}
-              </button>
-            );
-          })}
+        {/* theme studio entry: the film-strip switcher lives in the overlay */}
+        <div
+          className="clip-notch mb-6 flex items-center justify-between gap-4 p-5 backdrop-blur-md"
+          style={{ background: "var(--ato-panel)", border: "1px solid var(--ato-border)" }}
+        >
+          <div className="flex items-center gap-4">
+            <span
+              className="h-14 w-24 shrink-0"
+              style={{
+                background: SKINS.find((s) => s.id === skinId)?.swatch,
+                borderRadius: "var(--ato-radius)",
+                border: "1px solid var(--ato-border)",
+              }}
+            />
+            <div>
+              <div className="font-display text-sm font-bold tracking-widest">THEME STUDIO テーマ</div>
+              <div className="font-mono mt-1 text-[9px] tracking-[0.15em] text-dim">
+                {SKINS.find((s) => s.id === skinId)?.name ?? skinId}
+                {accentOverride ? ` + custom accent ${accentOverride}` : ""}: film-strip picker, accent colors, shuffle
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => useUi.getState().setThemeStudioOpen(true)}
+            className="clip-slash-both font-display flex shrink-0 items-center gap-2 px-5 py-2.5 text-[11px] font-bold tracking-[0.25em]"
+            style={{
+              background: "var(--ato-accent)",
+              color: "var(--ato-bg)",
+              boxShadow: "0 0 24px color-mix(in srgb, var(--ato-accent) 35%, transparent)",
+            }}
+          >
+            <Palette className="h-4 w-4" /> OPEN STUDIO
+          </button>
         </div>
+
         <p className="font-mono mt-3 text-[9px] tracking-[0.2em] text-dim">
-          ACTIVE: {skin.name} — {skin.tagline.toUpperCase()}
+          ACTIVE: {skin.name} · {skin.tagline.toUpperCase()}
         </p>
       </section>
 
@@ -395,11 +443,6 @@ export function SettingsScreen() {
                 </button>
               ))}
             </div>
-            {bgStyle !== "skin" && (
-              <p className="font-mono mt-2 text-[9px] tracking-[0.2em] text-dim">
-                {(BG_STYLES.find((s) => s.id === bgStyle)?.blurb ?? "").toUpperCase()}
-              </p>
-            )}
           </div>
 
           <div className="mb-4 flex gap-2">
@@ -419,7 +462,7 @@ export function SettingsScreen() {
             ))}
           </div>
           <p className="font-mono mb-5 text-[9px] tracking-[0.2em] text-dim">
-            SHADER DETAIL / RESOLUTION SCALER — LOWER IF YOUR GPU STRUGGLES
+            SHADER DETAIL / RESOLUTION SCALER: LOWER IF YOUR GPU STRUGGLES
           </p>
           <Toggle on={calm} onChange={setCalm} label="CALM MODE (reduced motion)" />
         </div>
@@ -486,7 +529,7 @@ export function SettingsScreen() {
             {EQ_APPLIED_LABEL}
           </p>
           <div className="mt-5 border-t border-line pt-4">
-            <Toggle on={fade} onChange={setFade} label="AUTO FADE — smooth fades on play/pause and track ends" />
+            <Toggle on={fade} onChange={setFade} label="AUTO FADE" />
             <div className="mt-4">
               <div className="font-mono mb-2 flex items-center justify-between text-[9px] tracking-[0.3em] text-dim">
                 <span>CROSSFADE クロスフェード</span>
@@ -506,10 +549,23 @@ export function SettingsScreen() {
               />
             </div>
             <div className="mt-4">
-              <Toggle on={autoplay} onChange={setAutoplay} label="AUTOPLAY — keep playing similar tracks when the queue ends" />
+              <Toggle on={autoplay} onChange={setAutoplay} label="AUTOPLAY" />
             </div>
             <div className="mt-4">
-              <Toggle on={smartVolume} onChange={setSmartVolume} label="SMART VOLUME — learn each track's loudness and level playback" />
+              <Toggle on={smartVolume} onChange={setSmartVolume} label="SMART VOLUME" />
+              {smartVolume && (
+                <button
+                  onClick={() =>
+                    void engine.resetSmartVolumeLearn().then(() =>
+                      toast("Learned loudness reset: tracks re-learn as they play", "info", "リセット"),
+                    )
+                  }
+                  className="font-mono mt-3 block text-[9px] tracking-[0.25em] text-dim underline underline-offset-4 transition-colors hover:text-accent"
+                  title="Discards every learned loudness correction; smart volume re-measures as tracks play"
+                >
+                  RESET LEARNED LOUDNESS
+                </button>
+              )}
             </div>
             <div className="mt-4">
               <div className="font-mono mb-2 text-[9px] tracking-[0.3em] text-dim">SLEEP タイマー</div>
@@ -545,6 +601,48 @@ export function SettingsScreen() {
                   <SleepCountdown endsAt={sleepEndsAt} />
                 )}
               </div>
+              {/* custom timer: hour/minute dropdowns in the app's menu style */}
+              <div className="font-mono mt-3 flex items-center gap-2 text-[10px] text-dim">
+                <span className="tracking-[0.2em]">CUSTOM</span>
+                <MenuSelect
+                  value={sleepH === "" ? null : sleepH}
+                  onChange={setSleepH}
+                  placeholder="0"
+                  ariaLabel="Sleep timer hours"
+                  className="w-16"
+                  options={Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${h}H` }))}
+                />
+                <MenuSelect
+                  value={sleepM === "" ? null : sleepM}
+                  onChange={setSleepM}
+                  placeholder="0"
+                  ariaLabel="Sleep timer minutes"
+                  className="w-16"
+                  options={Array.from({ length: 12 }, (_, i) => ({
+                    value: String(i * 5),
+                    label: `${String(i * 5).padStart(2, "0")}M`,
+                  }))}
+                />
+                <button
+                  onClick={() => {
+                    const total = (parseInt(sleepH, 10) || 0) * 60 + (parseInt(sleepM, 10) || 0);
+                    if (total <= 0) {
+                      setSleepEndsAt(null);
+                      return;
+                    }
+                    setSleepEndsAt(Date.now() + total * 60000);
+                    toast(`Sleep timer set: ${total} min`, "success", "スリープタイマー");
+                  }}
+                  disabled={sleepH === "" && sleepM === ""}
+                  className="clip-tag px-3 py-1.5 transition-colors disabled:opacity-40"
+                  style={{
+                    background: "color-mix(in srgb, var(--ato-accent-2) 14%, transparent)",
+                    color: "var(--ato-accent-2)",
+                  }}
+                >
+                  <span className="font-mono text-[10px] font-bold tracking-[0.2em]">SET</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -561,7 +659,7 @@ export function SettingsScreen() {
             className="font-mono cursor-pointer list-none text-[9px] tracking-[0.3em] text-dim hover:text-accent"
             style={{ color: "var(--ato-text-dim)" }}
           >
-            ▸ ADVANCED — SHARED TOKEN MODE
+            ▸ ADVANCED: SHARED TOKEN MODE
           </summary>
           <div className="mt-4">
             <CloudSection />
@@ -569,7 +667,7 @@ export function SettingsScreen() {
         </details>
       </section>
 
-      {/* data — backup / duplicates */}
+      {/* data: backup / duplicates */}
       <section className="mb-10">
         <SectionHeader title="DATA" jp="データ" />
         <div className="clip-notch bg-panel p-5 backdrop-blur-md" style={{ border: "1px solid var(--ato-border)" }}>
@@ -608,7 +706,7 @@ export function SettingsScreen() {
               }}
             />
             <span className="font-mono text-[9px] tracking-[0.15em] text-dim">
-              METADATA + PLAYLISTS AS JSON — AUDIO STAYS ON DISK / CLOUD
+              METADATA + PLAYLISTS AS JSON: AUDIO STAYS ON DISK / CLOUD
             </span>
           </div>
           <DuplicatesList />
@@ -623,7 +721,7 @@ export function SettingsScreen() {
           ATRI // LOCAL-FIRST
         </div>
       </section>
-    </div>
+    </ScrollFade>
   );
 }
 
@@ -635,24 +733,46 @@ function DuplicatesList() {
   if (groups.length === 0) {
     return (
       <p className="font-mono text-[9px] tracking-[0.2em] text-dim">
-        DUPLICATES 重複 — NONE FOUND
+        DUPLICATES 重複 · NONE FOUND
       </p>
     );
   }
   const shown = expanded ? groups : groups.slice(0, 8);
-  const remove = (ids: number[], paths: string[]) => {
-    void db
-      .transaction("rw", db.tracks, db.sources, async () => {
-        await db.tracks.bulkDelete(ids);
-        if (paths.length > 0) await db.sources.bulkDelete(paths);
-      })
-      .then(() => toast(`Removed ${ids.length} duplicate${ids.length === 1 ? "" : "s"}`, "success", "重複を削除"));
+  const remove = (group: DuplicateGroup) => {
+    void (async () => {
+      // cloud copies must be deleted ON THE SERVER too, or the manifest merge
+      // resurrects them right after the local delete
+      const cloudKeys = group.duplicates
+        .filter((t) => (t.source ?? "local") === "cloud")
+        .map((t) => t.path);
+      let cloudDeleted = 0;
+      if (cloudKeys.length > 0 && cloudConfigured()) {
+        try {
+          const { deleteCloudTracks } = await import("@/core/cloud/cloudService");
+          cloudDeleted = await deleteCloudTracks(cloudKeys);
+        } catch {
+          /* offline: local rows still go away; cloud copies return when online */
+        }
+      }
+      const local = group.duplicates.filter((t) => (t.source ?? "local") !== "cloud");
+      await db.transaction("rw", db.tracks, db.sources, async () => {
+        await db.tracks.bulkDelete(local.map((t) => t.id));
+        if (local.length > 0) await db.sources.bulkDelete(local.map((t) => t.path));
+      });
+      toast(
+        `Removed ${local.length + cloudDeleted} duplicate${local.length + cloudDeleted === 1 ? "" : "s"}${
+          cloudDeleted ? " (incl. cloud)" : ""
+        }`,
+        "success",
+        "重複を削除",
+      );
+    })();
   };
   return (
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
         <span className="font-mono text-[9px] tracking-[0.2em] text-dim">
-          DUPLICATES 重複 — {groups.length} GROUP{groups.length === 1 ? "" : "S"} FOUND
+          DUPLICATES 重複 · {groups.length} GROUP{groups.length === 1 ? "" : "S"} FOUND
         </span>
         {groups.length > 8 && (
           <button
@@ -673,21 +793,28 @@ function DuplicatesList() {
             <div className="min-w-0">
               <div className="truncate text-[13px] font-medium">{g.keeper.title}</div>
               <div className="font-mono truncate text-[9px] tracking-[0.15em] text-dim">
-                {g.keeper.artist} — {g.duplicates.length + 1} COPIES · {Math.round(g.keeper.duration)}s EACH
+                {g.keeper.artist} · {g.duplicates.length + 1} COPIES · {Math.round(g.keeper.duration)}s EACH
               </div>
             </div>
             <button
-              onClick={() =>
-                remove(
-                  g.duplicates.map((t) => t.id),
-                  g.duplicates.map((t) => t.path),
-                )
-              }
+              onClick={() => {
+                void (async () => {
+                  if (
+                    !(await confirm({
+                      title: `DELETE ${g.duplicates.length} DUPLICATE${g.duplicates.length === 1 ? "" : "S"}?`,
+                      body: `Keeps the oldest copy of ${g.keeper.title}. Cloud copies are removed from the server too.`,
+                      danger: true,
+                    }))
+                  )
+                    return;
+                  remove(g);
+                })();
+              }}
               className="clip-tag shrink-0 px-3 py-1.5"
               style={{ background: "color-mix(in srgb, var(--ato-danger) 12%, transparent)", color: "var(--ato-danger)" }}
             >
               <span className="font-mono text-[9px] font-bold tracking-[0.2em]">
-                KEEP OLDEST — DELETE {g.duplicates.length}
+                KEEP OLDEST: DELETE {g.duplicates.length}
               </span>
             </button>
           </div>

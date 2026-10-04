@@ -35,7 +35,7 @@ describe("findDuplicates", () => {
     const tracks = [
       track(1, "Song A", "Artist", 200, 20),
       track(2, "song  a", "artist", 201.5, 10),
-      track(3, "Song A", "Artist", 250, 5), // different song length — separate recording
+      track(3, "Song A", "Artist", 250, 5), // different song length: separate recording
       track(4, "Song B", "Artist", 180),
     ];
     const groups = findDuplicates(tracks);

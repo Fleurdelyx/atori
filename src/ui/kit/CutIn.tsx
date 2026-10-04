@@ -6,7 +6,7 @@ import { GradeBadge } from "./GradeBadge";
 import { useUi } from "@/state/uiStore";
 
 /**
- * CutIn — the track-change banner.
+ * CutIn: the track-change banner.
  * A complete panel slides in from the right, announces the track, holds,
  * then exits back to the right. Also pulses the shader stage (wipe + impact).
  */
@@ -76,11 +76,11 @@ export function CutIn() {
           <div className="font-mono flex items-center gap-3 text-[10px] tracking-[0.3em]">
             <span style={{ color: "var(--ato-accent)" }}>NOW PLAYING</span>
             <span className="text-dim">再生中</span>
-            <GradeBadge grade={current.grade} />
+            <GradeBadge grade={current.grade} format={current.format} />
           </div>
           <div className="text-xl font-bold">{current.title}</div>
           <div className="text-sm text-dim">
-            {current.artist} — {current.album}
+            {current.artist} · {current.album}
           </div>
         </div>
       </div>

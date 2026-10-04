@@ -1,9 +1,9 @@
 import { useAuth } from "@/core/auth/authStore";
 
 /**
- * RemoteDownload — asks the worker (accounts mode) to download a media URL
+ * RemoteDownload: asks the worker (accounts mode) to download a media URL
  * server-side and store it in the signed-in user's cloud library. Works from
- * any device — no local yt-dlp needed. Requires DL_BASE configured on the
+ * any device: no local yt-dlp needed. Requires DL_BASE configured on the
  * worker (a Cobalt-compatible downloader API).
  */
 
@@ -16,13 +16,20 @@ export interface RemoteDownloadResult {
   ext: string;
 }
 
-export async function remoteDownload(url: string): Promise<RemoteDownloadResult> {
+/** target format for a remote download; "best" keeps the source codec */
+export type DownloadFormat = "best" | "mp3" | "opus" | "wav" | "mp4";
+
+export async function remoteDownload(url: string, format: DownloadFormat = "best"): Promise<RemoteDownloadResult> {
   const a = useAuth.getState();
   if (!a.serverUrl || !a.sessionToken) throw new Error("Sign in to use cloud downloads");
   const res = await fetch(`${a.serverUrl.replace(/\/+$/, "")}/api/library/remote-download`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${a.sessionToken}` },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({
+      url,
+      downloadMode: format === "mp4" ? "auto" : "audio",
+      ...(format !== "best" && format !== "mp4" ? { audioFormat: format } : {}),
+    }),
   });
   const data = (await res.json().catch(() => ({}))) as Partial<RemoteDownloadResult> & {
     error?: string;

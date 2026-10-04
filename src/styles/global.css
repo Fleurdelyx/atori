@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ============================================================
-   ATRI global styles — token layer.
+   ATRI global styles: token layer.
    Defaults below are the NEON GACHA skin; SkinProvider overwrites
    them at runtime when a different skin is active. Tailwind v4
    `@theme inline` maps them into utilities (bg-ink, text-dim…).
@@ -77,7 +77,62 @@ body {
   background: transparent;
 }
 
+/* ---------- ScrollFade: vertical scrollbars that fade out when idle ----------
+   The native bar is hidden; ScrollFade paints a thumb overlay so the fade is
+   a real opacity transition (scrollbar-color snaps discretely, no tween). */
+.scroll-fade {
+  position: relative;
+  scrollbar-width: none;
+}
+.scroll-fade::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.fade-sb-strip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  z-index: 40;
+  /* click-through until it's visible: idle content near the right edge
+     keeps its own hit area */
+  pointer-events: none;
+  touch-action: none;
+}
+.fade-sb-strip[data-active],
+.fade-sb-strip[data-hover] {
+  pointer-events: auto;
+}
+.fade-sb-strip[data-fits] {
+  display: none;
+}
+.fade-sb-thumb {
+  position: absolute;
+  top: 0;
+  right: 3px;
+  width: 5px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ato-accent) 70%, transparent);
+  opacity: 0;
+  transition: opacity 0.55s ease;
+  pointer-events: none;
+}
+.fade-sb-strip[data-active] .fade-sb-thumb,
+.fade-sb-strip[data-hover] .fade-sb-thumb {
+  opacity: 1;
+  transition: opacity 0.12s ease;
+}
+
 /* ---------- gacha UI vocabulary ---------- */
+
+/* hidden native scrollbar: chevrons/wheel are the navigation instead */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 
 /* diagonal-cut panels */
 .clip-slash {
@@ -97,6 +152,22 @@ body {
   clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
 }
 
+/* Now Playing mode pills: hover glows in the active accent. var(--ato-accent)
+   already tracks the user's Theme Studio accent override. !important beats the
+   inline state styles on the buttons. */
+.np-mode-pill {
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.np-mode-pill:hover {
+  border-color: var(--ato-accent) !important;
+  color: var(--ato-text) !important;
+  box-shadow: 0 0 14px color-mix(in srgb, var(--ato-accent) 40%, transparent);
+}
+
 .font-jp {
   font-family: "Zen Kaku Gothic New", sans-serif;
 }
@@ -108,7 +179,7 @@ body {
   letter-spacing: 0.35em;
 }
 
-/* holographic foil sweep for covers — a strip that crosses once and rests
+/* holographic foil sweep for covers: a strip that crosses once and rests
    fully off-cover (transform-based: background-position % left the gold tail
    parked on the art during the hold) */
 .foil::after {
@@ -143,7 +214,7 @@ body {
     transform: translateX(340%); /* crossed and fully outside the right edge */
   }
   100% {
-    transform: translateX(340%); /* rest between passes — nothing visible */
+    transform: translateX(340%); /* rest between passes: nothing visible */
   }
 }
 
@@ -179,7 +250,58 @@ body {
   }
 }
 
-/* themed range slider — accent fill like the seek bar (set --fill to the %),
+/* mini-player title marquee: runs only on overflowing text; the travel
+   distance is set inline (--marquee-x) and the holds at each end give a
+   readable pause before the text reverses (animation is `alternate`) */
+@keyframes marquee {
+  0%,
+  15% {
+    transform: translateX(0);
+  }
+  85%,
+  100% {
+    transform: translateX(var(--marquee-x, -50%));
+  }
+}
+
+/* phonograph queue view: vinyl rotation. Slow, constant, amplitude-free
+   (epilepsy-safe); paused inline via animation-play-state when audio is
+   paused or the calm flag is set */
+@keyframes phono-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.phono-disc {
+  animation: phono-spin 7s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .phono-disc {
+    animation: none;
+  }
+}
+
+/* track-row grid: real CSS, not a Tailwind arbitrary class: the row layout
+   must never go stale when the JIT regenerates (a missing arbitrary class
+   falls back to the 3-col layout and the album column misaligns) */
+.track-row {
+  display: grid;
+  height: 3rem;
+  width: 100%;
+  align-items: center;
+  column-gap: 0.75rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  /* like-heart column sits between the number and the art */
+  grid-template-columns: 2.25rem 1.25rem 2.25rem minmax(0, 1fr) auto;
+}
+@media (min-width: 768px) {
+  .track-row {
+    grid-template-columns: 2rem 1.25rem 2.25rem minmax(0, 1fr) 10rem auto 5ch;
+  }
+}
+
+/* themed range slider: accent fill like the seek bar (set --fill to the %),
    diamond thumb echoing the NowPlaying seek handle */
 .ato-slider {
   -webkit-appearance: none;
@@ -214,7 +336,20 @@ body {
   cursor: pointer;
 }
 
-/* EQ band slider — ±12dB range; --fill marks the thumb position (same
+/* auto-fading diamond: revealed by hover or [data-live] (VolumeControl sets
+   it while the volume is changing), fades once idle */
+.fade-thumb::-webkit-slider-thumb {
+  transition: opacity 0.3s ease;
+}
+.fade-thumb:not([data-live])::-webkit-slider-thumb {
+  opacity: 0;
+}
+.fade-thumb:hover::-webkit-slider-thumb,
+.fade-thumb[data-live]::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+/* EQ band slider: ±12dB range; --fill marks the thumb position (same
    left-anchored accent fill as .ato-slider, so 50% = 0dB) */
 .eq-slider {
   -webkit-appearance: none;
@@ -262,6 +397,15 @@ body {
   outline-offset: 2px;
 }
 
+/* text fields show the caret instead: the accent ring reads as noise while
+   typing (and the fields already carry their own borders) */
+input:focus-visible,
+input:focus,
+textarea:focus-visible,
+textarea:focus {
+  outline: none;
+}
+
 button {
   cursor: pointer;
   font-family: inherit;
@@ -271,7 +415,7 @@ select {
   font-family: inherit;
 }
 
-/* ---------- PERSONA skin — white/black jagged textboxes ---------- */
+/* ---------- PERSONA skin: white/black jagged textboxes ---------- */
 /* White boxes carry black text; text sitting directly on the black/red
    background stays white. Gated on [data-skin] (set by SkinProvider). */
 [data-skin="persona-5"] .bg-panel,
@@ -305,7 +449,7 @@ select {
   transition: transform 0.25s cubic-bezier(0.85, 0, 0.1, 1);
 }
 
-/* ---------- MINIMAL + SOFT POP skins — soft Spotify-like: rounded, not angular ---------- */
+/* ---------- MINIMAL + SOFT POP skins: soft Spotify-like: rounded, not angular ---------- */
 /* Retire the clip-slash vocabulary: every cut corner becomes a rounded corner */
 [data-skin="minimal"] .clip-slash,
 [data-skin="minimal-light"] .clip-slash,
@@ -341,7 +485,7 @@ select {
   border-radius: var(--ato-radius);
 }
 /* Inline slanted shapes (toggle track + knob, grade/HI-RES badges, boot wipe
-   panels) — !important beats the inline style. Spans go full pill/circle,
+   panels): !important beats the inline style. Spans go full pill/circle,
    matching Spotify's chip + toggle language. */
 [data-skin="minimal"] [style*="polygon"],
 [data-skin="minimal-light"] [style*="polygon"],

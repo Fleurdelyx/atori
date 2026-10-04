@@ -24,6 +24,9 @@ export interface RemoteTrackMeta {
 
 export type CompanionError = Error & { code?: string };
 
+/** target format for a download; "best" keeps the source codec */
+export type DownloadFormat = "best" | "mp3" | "opus" | "wav" | "mp4";
+
 export async function companionHealth(): Promise<{ ok: boolean; ytdlp: string | null }> {
   const r = await fetch(`${BASE}/api/health`);
   if (!r.ok) throw new Error(`companion responded ${r.status}`);
@@ -65,13 +68,14 @@ export async function companionPlaylist(url: string): Promise<PlaylistExpansion>
   };
 }
 
-/** Download a track; resolves with a named File ready for importWithOverrides.
- *  `video` requests a ≤720p mp4 (needs ffmpeg on the companion machine). */
-export async function companionDownload(url: string, video = false): Promise<{ file: File; meta: RemoteTrackMeta }> {
+/** Download a track in the requested format; resolves with a named File ready
+ *  for importWithOverrides. "mp4" requests a ≤720p video (needs ffmpeg on the
+ *  companion machine), transcoded audio formats likewise. */
+export async function companionDownload(url: string, format: DownloadFormat = "best"): Promise<{ file: File; meta: RemoteTrackMeta }> {
   const r = await fetch(`${BASE}/api/download`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url, video }),
+    body: JSON.stringify({ url, format }),
   });
   if (!r.ok) {
     const data = (await r.json().catch(() => ({}))) as { message?: string; error?: string };
@@ -82,9 +86,28 @@ export async function companionDownload(url: string, video = false): Promise<{ f
     ? JSON.parse(decodeURIComponent(raw))
     : { title: "download", artist: "", duration: null, thumbnail: null, ext: "m4a" };
   const blob = await r.blob();
-  const mime = meta.ext === "webm" || meta.ext === "opus" ? "audio/webm" : "audio/mp4";
-  const file = new File([blob], `${safeName(meta.title)}.${meta.ext}`, { type: mime });
+  const file = new File([blob], `${safeName(meta.title)}.${meta.ext}`, { type: mimeForExt(meta.ext) });
   return { file, meta };
+}
+
+/** The companion reports the real post-processed extension; map it to a mime
+ *  music-metadata can sniff without tripping over a mismatched default. */
+function mimeForExt(ext: string): string {
+  switch (ext) {
+    case "mp3":
+      return "audio/mpeg";
+    case "wav":
+      return "audio/wav";
+    case "opus":
+    case "ogg":
+      return "audio/ogg";
+    case "flac":
+      return "audio/flac";
+    case "webm":
+      return "audio/webm";
+    default:
+      return "audio/mp4";
+  }
 }
 
 export function isSpotifyUrl(url: string): boolean {

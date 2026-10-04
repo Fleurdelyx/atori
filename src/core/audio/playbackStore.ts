@@ -9,7 +9,7 @@ const REPEAT_KEY = "atori:repeat";
 const QUEUE_KEY = "atori:queueV2";
 
 let preMuteVolume = 0.9;
-/** most recent playback position — used by the debounced queue saver */
+/** most recent playback position: used by the debounced queue saver */
 let lastKnownPos = 0;
 let queueSaveTimer: number | null = null;
 
@@ -20,7 +20,7 @@ export function saveLastTrack(track: TrackMeta | null, pos: number) {
   try {
     localStorage.setItem(LAST_KEY, JSON.stringify({ track, pos, savedAt }));
   } catch {
-    // storage unavailable — restore simply won't happen
+    // storage unavailable: restore simply won't happen
   }
   cloudResumePush?.({ track, pos, savedAt });
 }
@@ -61,7 +61,7 @@ export function readQueueState(): { queue: TrackMeta[]; index: number; pos: numb
 }
 
 /**
- * Registered by main.tsx when the cloud layer is ready — pushes the same
+ * Registered by main.tsx when the cloud layer is ready: pushes the same
  * snapshot to the signed-in account so any device can continue listening.
  */
 type CloudResumePush = (state: { track: TrackMeta; pos: number; savedAt: number }) => void;
@@ -80,7 +80,7 @@ interface PlaybackState {
   repeat: RepeatMode;
   shuffle: boolean;
   current: TrackMeta | null;
-  /** bumped whenever the current track changes — FX cut-ins subscribe to this */
+  /** bumped whenever the current track changes: FX cut-ins subscribe to this */
   trackChangeTick: number;
   playQueue: (tracks: TrackMeta[], startIndex: number) => void;
   toggle: () => void;
@@ -97,6 +97,8 @@ interface PlaybackState {
   moveInQueue: (from: number, to: number) => void;
   removeFromQueue: (queueIndex: number) => void;
   upNext: () => TrackMeta[];
+  /** Up-next rows with their real queue indices (shuffle-aware). */
+  upNextEntries: () => { track: TrackMeta; queueIndex: number }[];
 }
 
 export const usePlayback = create<PlaybackState>()((set) => ({
@@ -162,6 +164,7 @@ export const usePlayback = create<PlaybackState>()((set) => ({
   moveInQueue: (from, to) => engine.moveInQueue(from, to),
   removeFromQueue: (queueIndex) => engine.removeFromQueue(queueIndex),
   upNext: () => engine.upNext(),
+  upNextEntries: () => engine.upNextEntries(),
 }));
 
 // Wire the engine as source of truth → store mirror.

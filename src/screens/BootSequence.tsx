@@ -6,20 +6,24 @@ import { getSkin } from "@/skins/registry";
 
 // slanted bands backing the boot screen; static clip-paths, animated with
 // transforms only so the exit stays on the compositor. The grid runs one band
-// past each viewport edge — otherwise the slant leaves the top-left and
+// past each viewport edge: otherwise the slant leaves the top-left and
 // bottom-right corners uncovered and the app shows through behind the overlay.
+// Each band's right edge is extended 0.2% past the next band's left edge:
+// coinciding clip-path edges antialias into hairline seams through which the
+// app behind glints — a small overlap (same color) hides them.
 const SLICES = Array.from({ length: 8 }, (_, k) => {
   const s = 8; // % slant, echoes the brand slash
   const w = 100 / 6; // six bands across the viewport, plus one overhang per side
+  const g = 0.2; // % right-edge overlap over the next band
   const x0 = (k - 1) * w;
   const x1 = x0 + w;
-  return `polygon(${x0 + s}% 0%, ${x1 + s}% 0%, ${x1 - s}% 100%, ${x0 - s}% 100%)`;
+  return `polygon(${x0 + s}% 0%, ${x1 + s + g}% 0%, ${x1 - s + g}% 100%, ${x0 - s}% 100%)`;
 });
 
 const RGB_OFF = "0px 0px 0px rgba(0,0,0,0), 0px 0px 0px rgba(0,0,0,0)";
 
 /**
- * BootSequence — game-style launch set-piece:
+ * BootSequence: game-style launch set-piece:
  * slash line → logo assembles → system ticker → glitch jitter → the screen
  * splits into slanted slices that slide apart into the app.
  * Click anywhere to skip (jumps to the exit). Plays once per session.
@@ -123,7 +127,7 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
         );
     };
 
-    // GSAP's ticker runs on rAF, which freezes in hidden/throttled tabs —
+    // GSAP's ticker runs on rAF, which freezes in hidden/throttled tabs:
     // the watchdog guarantees the boot still completes (and unblocks) there
     const watchdog = setTimeout(() => finish(), 4600);
     build();

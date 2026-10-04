@@ -5,9 +5,9 @@ import { CloudAuthError } from "./cloudService";
 import { useAuth } from "@/core/auth/authStore";
 
 /**
- * FavoritesStore — "saved" cloud track keys. Local mirror persisted in
+ * FavoritesStore: "saved" cloud track keys. Local mirror persisted in
  * localStorage; pushed/pulled to the account when signed in (last-write-wins
- * full-list sync — the list is small by design).
+ * full-list sync: the list is small by design).
  */
 
 interface FavoritesState {

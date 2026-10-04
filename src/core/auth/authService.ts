@@ -1,7 +1,7 @@
 import type { AuthUser } from "./authStore";
 
 /**
- * AuthService — HTTP client for the worker's /api/auth/* endpoints.
+ * AuthService: HTTP client for the worker's /api/auth/* endpoints.
  * Throws Error with the worker's user-facing message on failure.
  */
 
@@ -23,7 +23,7 @@ async function postAuth(path: string, serverUrl: string, body: unknown): Promise
       body: JSON.stringify(body),
     });
   } catch {
-    throw new Error("Server unreachable — check the URL");
+    throw new Error("Server unreachable: check the URL");
   }
   const data = (await res.json().catch(() => ({}))) as { sessionToken?: string; user?: AuthUser; error?: string };
   if (!res.ok || !data.sessionToken || !data.user) {
@@ -47,8 +47,41 @@ export async function logout(serverUrl: string, sessionToken: string): Promise<v
       headers: { Authorization: `Bearer ${sessionToken}` },
     });
   } catch {
-    // best-effort — the local session is cleared regardless
+    // best-effort: the local session is cleared regardless
   }
+}
+
+/** Change the account email; needs the current password. Returns the updated user. */
+export async function changeEmail(
+  serverUrl: string,
+  sessionToken: string,
+  email: string,
+  password: string,
+): Promise<AuthUser> {
+  const res = await fetch(`${base(serverUrl)}/api/auth/email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { user?: AuthUser; error?: string };
+  if (!res.ok || !data.user) throw new Error(data.error ?? `Email change failed (HTTP ${res.status})`);
+  return data.user;
+}
+
+/** Change the password; needs the current one. Existing sessions stay valid. */
+export async function changePassword(
+  serverUrl: string,
+  sessionToken: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const res = await fetch(`${base(serverUrl)}/api/auth/password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `Password change failed (HTTP ${res.status})`);
 }
 
 /** null = the session is invalid or expired */

@@ -4,7 +4,7 @@ import { audioLevels } from "@/core/audio/AudioLevels";
 const BAR_COUNT = 48;
 
 /**
- * SpectrumBars — 48 GPU-friendly bars driven directly by the FFT tap.
+ * SpectrumBars: 48 GPU-friendly bars driven directly by the FFT tap.
  * Writes transforms imperatively in one rAF; zero React re-renders.
  */
 export function SpectrumBars({ className = "", height = 56 }: { className?: string; height?: number }) {

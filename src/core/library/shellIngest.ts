@@ -5,7 +5,7 @@ import { importEntries, type ImportProgress, type ImportResult } from "./importS
 import { db } from "./db";
 
 /**
- * Tauri-shell ingestion — replaces the browser FS-Access path when running
+ * Tauri-shell ingestion: replaces the browser FS-Access path when running
  * inside the desktop shell (WKWebView on macOS has no showDirectoryPicker,
  * and Chromium-only handles don't persist there). Uses the Tauri dialog +
  * fs plugins: pick a folder once, recursive-walk it, and feed the same
@@ -14,6 +14,22 @@ import { db } from "./db";
 
 export function inTauriShell(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+/**
+ * OS-level window fullscreen. HTML5 requestFullscreen only fills the webview;
+ * inside the desktop shell the window itself has to go fullscreen too, so
+ * the two are toggled together. Best-effort: the webview side still works if
+ * the native call fails.
+ */
+export async function tauriSetFullscreen(on: boolean): Promise<void> {
+  if (!inTauriShell()) return;
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().setFullscreen(on);
+  } catch {
+    /* capability missing or old shell: ignore */
+  }
 }
 
 const ROOTS_KEY = "tauriRootDirs";
@@ -43,13 +59,13 @@ interface FsNode {
   path: string;
 }
 
-/** Recursive walk (symlinks skipped — no loops). Builds absolute child paths. */
+/** Recursive walk (symlinks skipped: no loops). Builds absolute child paths. */
 async function walkDir(dirPath: string, out: FsNode[]): Promise<void> {
   let entries;
   try {
     entries = await readDir(dirPath);
   } catch {
-    return; // unreadable subtree — skip it
+    return; // unreadable subtree: skip it
   }
   for (const e of entries) {
     if (e.isSymlink) continue;
@@ -136,6 +152,53 @@ export async function tauriRescan(
     if (!collected) continue;
     entries.push(...collected.entries);
     for (const [k, v] of collected.lrcMap) lrcMap.set(k, v);
+  }
+  return importEntries(entries, onProgress, lrcMap);
+}
+
+/**
+ * Import files/folders dropped onto the window via Tauri's native drag-drop
+ * events (the shell's HTML5 drop path is unreliable under WebView2). Handles
+ * mixed drops: directories are walked, loose media files are read directly.
+ * Dropped singles are keyed by file name: same as the browser drop path.
+ */
+export async function tauriImportPaths(
+  paths: string[],
+  onProgress?: (p: ImportProgress) => void,
+): Promise<ImportResult | null> {
+  const dirRoots: string[] = [];
+  for (const p of paths) {
+    try {
+      await readDir(p);
+      dirRoots.push(p);
+    } catch {
+      // not a directory (or unreadable): treat as a file below
+    }
+  }
+  const entries: { path: string; file: File }[] = [];
+  const lrcMap = new Map<string, string>();
+  for (const root of dirRoots) {
+    const collected = await collectFolder(root, onProgress);
+    if (!collected) continue;
+    entries.push(...collected.entries);
+    for (const [k, v] of collected.lrcMap) lrcMap.set(k, v);
+  }
+  for (const p of paths) {
+    // a folder drop also lists nothing inside it: skip anything under a root
+    if (dirRoots.some((d) => p === d || p.startsWith(`${d}/`) || p.startsWith(`${d}\\`))) continue;
+    const name = p.split(/[\\/]/).pop() ?? p;
+    const ext = name.split(".").pop()?.toLowerCase() ?? "";
+    if (!AUDIO_EXTENSIONS.has(ext) && !VIDEO_EXTENSIONS.has(ext)) continue;
+    try {
+      onProgress?.({ done: 0, total: 0, current: name });
+      const data = await readFile(p);
+      entries.push({ path: name, file: new File([data], name, { type: MIME[ext] ?? "application/octet-stream" }) });
+    } catch {
+      // unreadable file: skip it
+    }
+  }
+  if (entries.length === 0 && lrcMap.size === 0) {
+    return { added: 0, updated: 0, skipped: 0, failed: 0 };
   }
   return importEntries(entries, onProgress, lrcMap);
 }

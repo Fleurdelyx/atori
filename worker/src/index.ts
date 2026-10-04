@@ -4,6 +4,7 @@ import {
   createSession,
   deleteSession,
   hashPassword,
+  isValidEmail,
   makeSalt,
   rateLimited,
   safeEqualHex,
@@ -13,11 +14,11 @@ import {
 } from "./auth";
 
 /**
- * atori-cloud — Cloudflare Worker fronting an R2 bucket + D1 accounts.
+ * atori-cloud: Cloudflare Worker fronting an R2 bucket + D1 accounts.
  *
  * Two access modes share the bucket:
  *
- * 1. ACCOUNTS (per-user, D1 sessions) — register/login, then:
+ * 1. ACCOUNTS (per-user, D1 sessions): register/login, then:
  *      GET  /api/auth/me            → session user
  *      POST /api/auth/register      → {email,password,name} → session
  *      POST /api/auth/login         → {email,password}      → session
@@ -30,7 +31,7 @@ import {
  *      GET|PUT /api/playlists               → cloud playlists
  *    Session rides `Authorization: Bearer` or `?token=` (media elements).
  *
- * 2. LEGACY shared token (advanced/self-host mode) — unchanged:
+ * 2. LEGACY shared token (advanced/self-host mode):
  *      GET|PUT /api/manifest, PUT /api/upload/<key>,
  *      DELETE /api/object/<key>, GET /api/stream/<key>
  *    `Authorization: Bearer <AUTH_TOKEN>` or `?token=<AUTH_TOKEN>`.
@@ -48,6 +49,8 @@ interface Env {
   DL_BASE?: string;
   /** optional API key for the downloader instance */
   DL_KEY?: string;
+  /** comma-separated emails granted catalogue-admin at login */
+  ADMIN_EMAIL?: string;
 }
 
 const OBJECT_KEY = /^(audio|cover)\/[A-Za-z0-9 ._\-/]{1,400}$/;
@@ -93,8 +96,15 @@ const app = new Hono<{ Bindings: Env; Variables: { user: SessionUser } }>();
 /* ---------- CORS (allow-listed origin) ---------- */
 app.use("*", async (c, next) => {
   const origin = c.req.header("Origin") ?? "";
+  // comma-separated allow-list (or "*"): the app lives in several places:
+  // the Vercel site, the Tauri shell (http://tauri.localhost), and localhost dev
   const allow = c.env.ALLOWED_ORIGIN;
-  const corsOrigin = allow === "*" ? "*" : origin !== "" && origin === allow ? origin : null;
+  const allowed = allow.split(",").map((s) => s.trim()).filter(Boolean);
+  const corsOrigin = allowed.includes("*")
+    ? "*"
+    : origin !== "" && allowed.includes(origin)
+      ? origin
+      : null;
 
   if (c.req.method === "OPTIONS") {
     if (corsOrigin) {
@@ -108,7 +118,7 @@ app.use("*", async (c, next) => {
   }
 
   await next();
-  // stamp the actual response too — handlers may return raw Responses
+  // stamp the actual response too: handlers may return raw Responses
   if (corsOrigin && c.res) {
     c.res.headers.set("Access-Control-Allow-Origin", corsOrigin);
     c.res.headers.set("Access-Control-Expose-Headers", "Content-Range, ETag");
@@ -121,7 +131,12 @@ app.get("/api/health", (c) => c.json({ ok: true, service: "atori-cloud", version
 /* ---------- accounts: register / login / logout / me ---------- */
 
 function publicUser(u: SessionUser) {
-  return { id: u.id, email: u.email, name: u.name };
+  return { id: u.id, email: u.email, name: u.name, isAdmin: u.admin, createdAt: u.createdAt };
+}
+
+/** comma-separated ADMIN_EMAIL secret, lowercased */
+function adminEmails(env: Env): string[] {
+  return (env.ADMIN_EMAIL ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 
 app.post("/api/auth/register", async (c) => {
@@ -132,7 +147,7 @@ app.post("/api/auth/register", async (c) => {
   const name = (body.name ?? "").trim() || email.split("@")[0];
   const invalid = validateRegistration(email, password, name);
   if (invalid) return c.json({ error: invalid }, 400);
-  if (rateLimited(`register:${email}`)) return c.json({ error: "Too many attempts — try again later" }, 429);
+  if (rateLimited(`register:${email}`)) return c.json({ error: "Too many attempts: try again later" }, 429);
 
   try {
     const exists = await c.env.AUTH.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
@@ -140,15 +155,19 @@ app.post("/api/auth/register", async (c) => {
     const id = crypto.randomUUID();
     const salt = await makeSalt();
     const pwHash = await hashPassword(password, salt);
+    // admin bootstrap: the first account on a fresh worker, or an ADMIN_EMAIL match
+    const count = await c.env.AUTH.prepare("SELECT COUNT(*) AS n FROM users").first<{ n: number }>();
+    const admin = (count?.n ?? 0) === 0 || adminEmails(c.env).includes(email);
+    const now = Date.now();
     await c.env.AUTH
-      .prepare("INSERT INTO users (id, email, name, pw_hash, pw_salt, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(id, email, name, pwHash, salt, Date.now())
+      .prepare("INSERT INTO users (id, email, name, pw_hash, pw_salt, is_admin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(id, email, name, pwHash, salt, admin ? 1 : 0, now)
       .run();
     const token = await createSession(c.env.AUTH, id);
-    return c.json({ sessionToken: token, user: { id, email, name } });
+    return c.json({ sessionToken: token, user: { id, email, name, isAdmin: admin, createdAt: now } });
   } catch (e) {
     console.error("register failed", e);
-    return c.json({ error: "Storage error — try again" }, 500);
+    return c.json({ error: "Storage error: try again" }, 500);
   }
 });
 
@@ -157,22 +176,30 @@ app.post("/api/auth/login", async (c) => {
   if (!body) return c.json({ error: "Invalid request body" }, 400);
   const email = (body.email ?? "").trim().toLowerCase();
   const password = body.password ?? "";
-  if (rateLimited(`login:${email}`)) return c.json({ error: "Too many attempts — try again later" }, 429);
+  if (rateLimited(`login:${email}`)) return c.json({ error: "Too many attempts: try again later" }, 429);
 
   try {
     const row = await c.env.AUTH
-      .prepare("SELECT id, email, name, pw_hash, pw_salt FROM users WHERE email = ?")
+      .prepare("SELECT id, email, name, pw_hash, pw_salt, is_admin, created_at FROM users WHERE email = ?")
       .bind(email)
-      .first<{ id: string; email: string; name: string; pw_hash: string; pw_salt: string }>();
+      .first<{ id: string; email: string; name: string; pw_hash: string; pw_salt: string; is_admin: number; created_at: number }>();
     if (!row) return c.json({ error: "Invalid email or password" }, 401);
     const attempt = await hashPassword(password, row.pw_salt);
     if (!safeEqualHex(attempt, row.pw_hash)) return c.json({ error: "Invalid email or password" }, 401);
     clearAttempts(`login:${email}`);
+    let admin = !!row.is_admin;
+    if (!admin && adminEmails(c.env).includes(email)) {
+      await c.env.AUTH.prepare("UPDATE users SET is_admin = 1 WHERE id = ?").bind(row.id).run();
+      admin = true;
+    }
     const token = await createSession(c.env.AUTH, row.id);
-    return c.json({ sessionToken: token, user: publicUser({ id: row.id, email: row.email, name: row.name }) });
+    return c.json({
+      sessionToken: token,
+      user: { id: row.id, email: row.email, name: row.name, isAdmin: admin, createdAt: row.created_at },
+    });
   } catch (e) {
     console.error("login failed", e);
-    return c.json({ error: "Storage error — try again" }, 500);
+    return c.json({ error: "Storage error: try again" }, 500);
   }
 });
 
@@ -193,6 +220,54 @@ app.post("/api/auth/logout", sessionAuth, async (c) => {
 });
 
 app.get("/api/auth/me", sessionAuth, (c) => c.json({ user: publicUser(c.get("user")) }));
+
+/* ---------- account self-management (password-confirmed changes) ---------- */
+
+async function confirmPassword(c: { env: Env }, userId: string, password: string): Promise<boolean> {
+  const row = await c.env.AUTH
+    .prepare("SELECT pw_hash, pw_salt FROM users WHERE id = ?")
+    .bind(userId)
+    .first<{ pw_hash: string; pw_salt: string }>();
+  if (!row) return false;
+  const attempt = await hashPassword(password, row.pw_salt);
+  return safeEqualHex(attempt, row.pw_hash);
+}
+
+/** change the account email: current password + new address */
+app.post("/api/auth/email", sessionAuth, async (c) => {
+  const user = c.get("user");
+  const body = await c.req.json<{ email?: string; password?: string }>().catch(() => null);
+  if (!body) return c.json({ error: "Invalid request body" }, 400);
+  const email = (body.email ?? "").trim().toLowerCase();
+  if (rateLimited(`email:${user.id}`)) return c.json({ error: "Too many attempts: try again later" }, 429);
+  if (!isValidEmail(email)) return c.json({ error: "Enter a valid email address" }, 400);
+  if (!(await confirmPassword(c, user.id, body.password ?? ""))) {
+    return c.json({ error: "Password incorrect" }, 403);
+  }
+  const exists = await c.env.AUTH.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
+  if (exists) return c.json({ error: "An account with this email already exists" }, 409);
+  await c.env.AUTH.prepare("UPDATE users SET email = ? WHERE id = ?").bind(email, user.id).run();
+  return c.json({ ok: true, user: publicUser({ ...user, email }) });
+});
+
+/** change the password: current password + new one (sessions stay valid) */
+app.post("/api/auth/password", sessionAuth, async (c) => {
+  const user = c.get("user");
+  const body = await c.req.json<{ currentPassword?: string; newPassword?: string }>().catch(() => null);
+  if (!body) return c.json({ error: "Invalid request body" }, 400);
+  if (rateLimited(`pw:${user.id}`)) return c.json({ error: "Too many attempts: try again later" }, 429);
+  if (typeof body.newPassword !== "string" || body.newPassword.length < 8) {
+    return c.json({ error: "Password must be at least 8 characters" }, 400);
+  }
+  if (body.newPassword.length > 200) return c.json({ error: "Password too long" }, 400);
+  if (!(await confirmPassword(c, user.id, body.currentPassword ?? ""))) {
+    return c.json({ error: "Current password incorrect" }, 403);
+  }
+  const salt = await makeSalt();
+  const pwHash = await hashPassword(body.newPassword, salt);
+  await c.env.AUTH.prepare("UPDATE users SET pw_hash = ?, pw_salt = ? WHERE id = ?").bind(pwHash, salt, user.id).run();
+  return c.json({ ok: true });
+});
 
 /* ---------- account-scoped library ---------- */
 
@@ -226,7 +301,7 @@ app.put("/api/library/manifest", async (c) => {
 
 app.put("/api/library/upload/*", async (c) => {
   const inner = keyAfter(c.req.path, "/api/library/upload/");
-  if (!OBJECT_KEY.test(inner)) return c.text("Bad key — must be audio/… or cover/…", 400);
+  if (!OBJECT_KEY.test(inner)) return c.text("Bad key: must be audio/… or cover/…", 400);
   const body = c.req.raw.body;
   if (!body) return c.text("Empty body", 400);
   const key = `u/${c.get("user").id}/${inner}`;
@@ -241,6 +316,69 @@ app.delete("/api/library/object/*", async (c) => {
   if (!OBJECT_KEY.test(inner)) return c.text("Bad key", 400);
   await c.env.LIBRARY.delete(`u/${c.get("user").id}/${inner}`);
   return c.json({ ok: true });
+});
+
+/* ---------- multipart uploads: files too big for the ~100MB proxy body cap.
+   The client slices the file into <100MB parts; R2 assembles the object. ---------- */
+
+app.post("/api/library/upload-mp/init", async (c) => {
+  const body = await c.req.json<{ key?: string; contentType?: string }>().catch(() => null);
+  const inner = body?.key ?? "";
+  if (!OBJECT_KEY.test(inner)) return c.text("Bad key: must be audio/… or cover/…", 400);
+  const mp = await c.env.LIBRARY.createMultipartUpload(`u/${c.get("user").id}/${inner}`, {
+    httpMetadata: { contentType: body?.contentType ?? "application/octet-stream" },
+  });
+  return c.json({ key: inner, uploadId: mp.uploadId });
+});
+
+app.put("/api/library/upload-mp/part", async (c) => {
+  const inner = c.req.query("key") ?? "";
+  const uploadId = c.req.query("uploadId") ?? "";
+  const partNumber = Number(c.req.query("partNumber"));
+  if (!OBJECT_KEY.test(inner) || !uploadId || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+    return c.text("Bad params", 400);
+  }
+  const part = await c.req.arrayBuffer();
+  if (part.byteLength === 0) return c.text("Empty part", 400);
+  const mp = c.env.LIBRARY.resumeMultipartUpload(`u/${c.get("user").id}/${inner}`, uploadId);
+  const uploaded = await mp.uploadPart(partNumber, part);
+  return c.json({ partNumber: uploaded.partNumber, etag: uploaded.etag });
+});
+
+app.post("/api/library/upload-mp/complete", async (c) => {
+  const body = await c.req
+    .json<{ key?: string; uploadId?: string; parts?: { partNumber: number; etag: string }[] }>()
+    .catch(() => null);
+  const inner = body?.key ?? "";
+  if (!OBJECT_KEY.test(inner) || !body?.uploadId || !Array.isArray(body.parts) || body.parts.length === 0) {
+    return c.text("Bad params", 400);
+  }
+  const mp = c.env.LIBRARY.resumeMultipartUpload(`u/${c.get("user").id}/${inner}`, body.uploadId);
+  const object = await mp.complete([...body.parts].sort((a, b) => a.partNumber - b.partNumber));
+  return c.json({ ok: true, key: inner, size: object.size });
+});
+
+app.post("/api/library/upload-mp/abort", async (c) => {
+  const body = await c.req.json<{ key?: string; uploadId?: string }>().catch(() => null);
+  const inner = body?.key ?? "";
+  if (!OBJECT_KEY.test(inner) || !body?.uploadId) return c.text("Bad params", 400);
+  const mp = c.env.LIBRARY.resumeMultipartUpload(`u/${c.get("user").id}/${inner}`, body.uploadId);
+  await mp.abort();
+  return c.json({ ok: true });
+});
+
+/** Bulk-delete objects (selective cloud management). Caps at 500 keys/call. */
+app.post("/api/library/delete", async (c) => {
+  const body = await c.req.json<{ keys?: string[] }>().catch(() => null);
+  if (!Array.isArray(body?.keys) || body.keys.length === 0) return c.text("No keys", 400);
+  const prefix = `u/${c.get("user").id}/`;
+  let deleted = 0;
+  for (const inner of body.keys.slice(0, 500)) {
+    if (!OBJECT_KEY.test(inner)) continue;
+    await c.env.LIBRARY.delete(prefix + inner);
+    deleted++;
+  }
+  return c.json({ ok: true, deleted });
 });
 
 /* ---------- account resume state (continue listening on any device) ---------- */
@@ -341,11 +479,11 @@ app.get("/s/:token", async (c) => {
     })
     .join("\n");
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(doc.name)} — ATRI share</title>
+<title>${esc(doc.name)}: ATRI share</title>
 <style>body{background:#121212;color:#fff;font-family:system-ui,sans-serif;max-width:640px;margin:0 auto;padding:2rem 1rem}
 h1{font-size:1.4rem}ul{list-style:none;padding:0}li{border-bottom:1px solid #333;padding:.8rem 0}
 span{display:block;margin-bottom:.4rem;font-size:.9rem}audio{width:100%}footer{margin-top:2rem;color:#888;font-size:.75rem}</style>
-</head><body><h1>${esc(doc.name)}</h1><p style="color:#888;font-size:.8rem">Shared from ATRI — ${doc.trackKeys.length} tracks</p>
+</head><body><h1>${esc(doc.name)}</h1><p style="color:#888;font-size:.8rem">Shared from ATRI: ${doc.trackKeys.length} tracks</p>
 <ul>${rows}</ul><footer>ATRI // local-first music</footer></body></html>`;
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 });
@@ -460,7 +598,7 @@ app.put("/api/playlists", async (c) => {
 
 /* ---------- remote downloads (Cobalt-compatible API) ---------- */
 
-/** public http/https only — no localhost/LAN/metadata endpoints */
+/** public http/https only: no localhost/LAN/metadata endpoints */
 function validatePublicUrl(raw: string): { url: URL } | { error: string; message: string } {
   let u: URL;
   try {
@@ -486,19 +624,28 @@ function validatePublicUrl(raw: string): { url: URL } | { error: string; message
 
 app.post("/api/library/remote-download", sessionAuth, async (c) => {
   if (!c.env.DL_BASE) {
-    return c.json({ error: "remote downloads are not configured on this worker" }, 503);
+    return c.json(
+      {
+        error: "remote_downloads_unconfigured",
+        message:
+          "Server-side downloads are not configured on this worker (DL_BASE missing): use the desktop app's companion, or point DL_BASE at a Cobalt-compatible downloader",
+      },
+      503,
+    );
   }
-  const body = await c.req.json<{ url?: string }>().catch(() => null);
+  const body = await c.req.json<{ url?: string; audioFormat?: string }>().catch(() => null);
   const raw = body?.url ?? "";
   const verdict = validatePublicUrl(raw);
   if ("error" in verdict) return c.json({ error: verdict.error, message: verdict.message }, 400);
   const target = verdict.url;
   if (/(^|\.)spotify\.com$/.test(target.hostname)) {
     return c.json(
-      { error: "spotify_drm", message: "Spotify is DRM-protected — find the track on YouTube instead" },
+      { error: "spotify_drm", message: "Spotify is DRM-protected: find the track on YouTube instead" },
       422,
     );
   }
+  const AUDIO_FORMATS = new Set(["best", "mp3", "opus", "wav", "ogg"]);
+  const audioFormat = body?.audioFormat && AUDIO_FORMATS.has(body.audioFormat) ? body.audioFormat : "best";
 
   // ask the Cobalt-compatible downloader for an audio tunnel
   const dlHeaders: Record<string, string> = { Accept: "application/json", "Content-Type": "application/json" };
@@ -509,7 +656,12 @@ app.post("/api/library/remote-download", sessionAuth, async (c) => {
     const r = await fetch(c.env.DL_BASE.replace(/\/+$/, ""), {
       method: "POST",
       headers: dlHeaders,
-      body: JSON.stringify({ url: target.href, downloadMode: "audio", filenameStyle: "basic" }),
+      body: JSON.stringify({
+        url: target.href,
+        downloadMode: "audio",
+        filenameStyle: "basic",
+        ...(audioFormat !== "best" ? { audioFormat } : {}),
+      }),
     });
     const data = (await r.json().catch(() => ({}))) as {
       status?: string;
@@ -518,7 +670,7 @@ app.post("/api/library/remote-download", sessionAuth, async (c) => {
       error?: { code?: string };
     };
     if (data.status === "picker") {
-      return c.json({ error: "picker", message: "This link returned multiple formats — paste a direct track link" }, 422);
+      return c.json({ error: "picker", message: "This link returned multiple formats: paste a direct track link" }, 422);
     }
     if (data.status !== "tunnel" && data.status !== "redirect") {
       const msg = data.error?.code ?? `downloader responded ${r.status}`;
@@ -565,7 +717,7 @@ app.post("/api/library/remote-download", sessionAuth, async (c) => {
   if (!media.ok || !media.body) {
     return c.json({ error: "download_failed", message: `media fetch failed (${media.status})` }, 502);
   }
-  // buffer to a fixed length — R2 put (and the local simulator) rejects
+  // buffer to a fixed length: R2 put (and the local simulator) rejects
   // streams of unknown length
   const audio = new Uint8Array(await media.arrayBuffer());
   if (audio.length === 0) {
@@ -578,11 +730,177 @@ app.post("/api/library/remote-download", sessionAuth, async (c) => {
   return c.json({ ok: true, key: inner, title: baseName, artist, thumbnailUrl, ext });
 });
 
+/* ---------- shared catalogue: admin-curated tracks every signed-in account
+   can browse and stream. Keys live under catalogue/ at the bucket root;
+   writes need an admin account or the legacy shared token.
+   The manifest and catalogue/ audio are ALSO readable anonymously via
+   /api/catalogue/public and /api/stream/catalogue/*: the catalogue is the
+   server's public storefront, and players should be able to play from it
+   before (or without) signing in. ---------- */
+
+/** public, unauthenticated read of the shared catalogue manifest */
+app.get("/api/catalogue/public", async (c) => {
+  const obj = await c.env.LIBRARY.get("catalogue/manifest.json");
+  if (!obj) return c.json({ version: 1, updatedAt: 0, tracks: [] });
+  return new Response(obj.body, {
+    headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=30" },
+  });
+});
+
+const catalogueAuth: MiddlewareHandler = async (c, next) => {
+  const token = bearerOrQueryToken(c);
+  if (c.env.AUTH_TOKEN && token === c.env.AUTH_TOKEN) return next(); // legacy owner
+  const user = token ? await userForToken(c.env.AUTH, token) : null;
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  c.set("user", user);
+  const reading = c.req.method === "GET" || c.req.method === "HEAD";
+  if (!reading && !user.admin) {
+    return c.json(
+      { error: "forbidden", message: "Catalogue changes need an admin account (set ADMIN_EMAIL on the worker)" },
+      403,
+    );
+  }
+  await next();
+};
+
+app.use("/api/catalogue/*", catalogueAuth);
+
+app.get("/api/catalogue/manifest", async (c) => {
+  const obj = await c.env.LIBRARY.get("catalogue/manifest.json");
+  if (!obj) return c.json({ version: 1, updatedAt: 0, tracks: [] });
+  return new Response(obj.body, {
+    headers: { "Content-Type": "application/json", ETag: obj.httpEtag },
+  });
+});
+
+app.put("/api/catalogue/manifest", async (c) => {
+  const body = await c.req.text();
+  try {
+    const parsed = JSON.parse(body) as { tracks?: unknown };
+    if (!Array.isArray(parsed.tracks)) return c.text("Manifest must contain tracks[]", 400);
+  } catch {
+    return c.text("Manifest must be valid JSON", 400);
+  }
+  await c.env.LIBRARY.put("catalogue/manifest.json", body, {
+    httpMetadata: { contentType: "application/json" },
+  });
+  return c.json({ ok: true });
+});
+
+/* catalogue playlists: admin-curated orderings over catalogue/ track keys,
+   one JSON object so every client reads the same list */
+app.get("/api/catalogue/playlists", async (c) => {
+  const obj = await c.env.LIBRARY.get("catalogue/playlists.json");
+  if (!obj) return c.json({ version: 1, updatedAt: 0, playlists: [] });
+  return new Response(obj.body, {
+    headers: { "Content-Type": "application/json", ETag: obj.httpEtag },
+  });
+});
+
+app.put("/api/catalogue/playlists", async (c) => {
+  const body = await c.req.text();
+  try {
+    const parsed = JSON.parse(body) as { playlists?: unknown };
+    if (!Array.isArray(parsed.playlists)) return c.text("Body must contain playlists[]", 400);
+  } catch {
+    return c.text("Body must be valid JSON", 400);
+  }
+  await c.env.LIBRARY.put("catalogue/playlists.json", body, {
+    httpMetadata: { contentType: "application/json" },
+  });
+  return c.json({ ok: true });
+});
+
+app.put("/api/catalogue/upload/*", async (c) => {
+  const inner = keyAfter(c.req.path, "/api/catalogue/upload/");
+  if (!OBJECT_KEY.test(inner)) return c.text("Bad key: must be audio/… or cover/…", 400);
+  const body = c.req.raw.body;
+  if (!body) return c.text("Empty body", 400);
+  await c.env.LIBRARY.put(`catalogue/${inner}`, body, {
+    httpMetadata: { contentType: c.req.header("Content-Type") ?? "application/octet-stream" },
+  });
+  return c.json({ ok: true, key: inner });
+});
+
+app.post("/api/catalogue/upload-mp/init", async (c) => {
+  const body = await c.req.json<{ key?: string; contentType?: string }>().catch(() => null);
+  const inner = body?.key ?? "";
+  if (!OBJECT_KEY.test(inner)) return c.text("Bad key: must be audio/… or cover/…", 400);
+  const mp = await c.env.LIBRARY.createMultipartUpload(`catalogue/${inner}`, {
+    httpMetadata: { contentType: body?.contentType ?? "application/octet-stream" },
+  });
+  return c.json({ key: inner, uploadId: mp.uploadId });
+});
+
+app.put("/api/catalogue/upload-mp/part", async (c) => {
+  const inner = c.req.query("key") ?? "";
+  const uploadId = c.req.query("uploadId") ?? "";
+  const partNumber = Number(c.req.query("partNumber"));
+  if (!OBJECT_KEY.test(inner) || !uploadId || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+    return c.text("Bad params", 400);
+  }
+  const part = await c.req.arrayBuffer();
+  if (part.byteLength === 0) return c.text("Empty part", 400);
+  const mp = c.env.LIBRARY.resumeMultipartUpload(`catalogue/${inner}`, uploadId);
+  const uploaded = await mp.uploadPart(partNumber, part);
+  return c.json({ partNumber: uploaded.partNumber, etag: uploaded.etag });
+});
+
+app.post("/api/catalogue/upload-mp/complete", async (c) => {
+  const body = await c.req
+    .json<{ key?: string; uploadId?: string; parts?: { partNumber: number; etag: string }[] }>()
+    .catch(() => null);
+  const inner = body?.key ?? "";
+  if (!OBJECT_KEY.test(inner) || !body?.uploadId || !Array.isArray(body.parts) || body.parts.length === 0) {
+    return c.text("Bad params", 400);
+  }
+  const mp = c.env.LIBRARY.resumeMultipartUpload(`catalogue/${inner}`, body.uploadId);
+  const object = await mp.complete([...body.parts].sort((a, b) => a.partNumber - b.partNumber));
+  return c.json({ ok: true, key: inner, size: object.size });
+});
+
+app.post("/api/catalogue/upload-mp/abort", async (c) => {
+  const body = await c.req.json<{ key?: string; uploadId?: string }>().catch(() => null);
+  const inner = body?.key ?? "";
+  if (!OBJECT_KEY.test(inner) || !body?.uploadId) return c.text("Bad params", 400);
+  const mp = c.env.LIBRARY.resumeMultipartUpload(`catalogue/${inner}`, body.uploadId);
+  await mp.abort();
+  return c.json({ ok: true });
+});
+
+/** Admin bulk-delete: removes objects AND prunes the catalogue manifest so
+ *  listeners stop seeing the tracks. Keys are absolute (catalogue/…). */
+app.post("/api/catalogue/delete", async (c) => {
+  const body = await c.req.json<{ keys?: string[] }>().catch(() => null);
+  if (!Array.isArray(body?.keys) || body.keys.length === 0) return c.text("No keys", 400);
+  let deleted = 0;
+  for (const key of body.keys.slice(0, 500)) {
+    if (!key.startsWith("catalogue/") || !OBJECT_KEY.test(key.slice("catalogue/".length))) continue;
+    await c.env.LIBRARY.delete(key);
+    deleted++;
+  }
+  const obj = await c.env.LIBRARY.get("catalogue/manifest.json");
+  if (obj) {
+    const manifest = (await obj.json()) as { tracks: { key: string }[] };
+    const dead = new Set(body.keys);
+    const tracks = manifest.tracks.filter((t) => !dead.has(t.key));
+    if (tracks.length !== manifest.tracks.length) {
+      await c.env.LIBRARY.put(
+        "catalogue/manifest.json",
+        JSON.stringify({ version: 1, updatedAt: Date.now(), tracks }),
+        { httpMetadata: { contentType: "application/json" } },
+      );
+    }
+  }
+  return c.json({ ok: true, deleted });
+});
+
 /* ---------- stream: dual auth (session → u/<uid>/, legacy token → root) ---------- */
 
 app.get("/api/stream/*", async (c) => {
   const token = bearerOrQueryToken(c);
   let prefix = "";
+  let anonymousCatalogue = false;
   if (token) {
     const user = await userForToken(c.env.AUTH, token);
     if (user) {
@@ -591,11 +909,16 @@ app.get("/api/stream/*", async (c) => {
       return c.json({ error: "Unauthorized" }, 401);
     }
   } else {
-    return c.json({ error: "Unauthorized" }, 401);
+    // no credentials: only the shared catalogue's own keys are public
+    anonymousCatalogue = true;
   }
 
-  const key = prefix + keyAfter(c.req.path, "/api/stream/");
-  if (!OBJECT_KEY.test(key.replace(/^u\/[^/]+\//, ""))) return c.text("Bad key", 400);
+  const inner = keyAfter(c.req.path, "/api/stream/");
+  if (anonymousCatalogue && !inner.startsWith("catalogue/")) return c.json({ error: "Unauthorized" }, 401);
+  // catalogue keys are readable by every signed-in session (and anonymous);
+  // everything else is namespaced to the session's user (legacy token = root)
+  const key = inner.startsWith("catalogue/") ? inner : prefix + inner;
+  if (!OBJECT_KEY.test(key.replace(/^u\/[^/]+\//, "").replace(/^catalogue\//, ""))) return c.text("Bad key", 400);
   const rangeHeader = c.req.header("Range");
   const range = rangeHeader ? parseRange(rangeHeader) : null;
   const obj = await c.env.LIBRARY.get(key, range ? { range } : undefined);
@@ -659,7 +982,7 @@ app.put("/api/manifest", async (c) => {
 
 app.put("/api/upload/*", async (c) => {
   const key = keyAfter(c.req.path, "/api/upload/");
-  if (!OBJECT_KEY.test(key)) return c.text("Bad key — must be audio/… or cover/…", 400);
+  if (!OBJECT_KEY.test(key)) return c.text("Bad key: must be audio/… or cover/…", 400);
   const body = c.req.raw.body;
   if (!body) return c.text("Empty body", 400);
   await c.env.LIBRARY.put(key, body, {

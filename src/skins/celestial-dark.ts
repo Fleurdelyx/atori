@@ -1,7 +1,7 @@
 import type { SkinDef } from "./types";
 
 /**
- * CELESTIAL DARK — indigo night, gold leaf, constellations.
+ * CELESTIAL DARK: indigo night, gold leaf, constellations.
  * Cinematic and calm; serif display type.
  */
 export const celestialDark: SkinDef = {

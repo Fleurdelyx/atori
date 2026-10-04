@@ -4,7 +4,7 @@ import { useUi } from "@/state/uiStore";
 import { useWrapped } from "@/core/library/useLibrary";
 
 /**
- * WrappedOverlay — ATRI's year-in-review: minutes, top track/artist/album/tags
+ * WrappedOverlay: ATRI's year-in-review: minutes, top track/artist/album/tags
  * derived from the local play log. Recomputed live whenever it opens.
  */
 export function WrappedOverlay() {
@@ -48,13 +48,13 @@ export function WrappedOverlay() {
               <Sparkles className="h-5 w-5" style={{ color: "var(--ato-gold)" }} />
               <div>
                 <h2 className="font-display text-2xl font-bold tracking-wide">ATRI WRAPPED</h2>
-                <p className="font-mono text-[9px] tracking-[0.3em] text-dim">あなたの年間レポート — FROM YOUR LOCAL PLAY LOG</p>
+                <p className="font-mono text-[9px] tracking-[0.3em] text-dim">あなたの年間レポート · FROM YOUR LOCAL PLAY LOG</p>
               </div>
             </div>
 
             {!hasData ? (
               <p className="mt-10 mb-6 text-center text-sm text-dim">
-                Play something first — your stats build themselves as you listen.
+                Play something first: your stats build themselves as you listen.
                 <span className="font-jp mt-2 block">再生履歴がまだありません</span>
               </p>
             ) : (
@@ -72,7 +72,7 @@ export function WrappedOverlay() {
                       {w.topTrack.title}
                     </p>
                     <p className="text-[12px] text-dim">
-                      {w.topTrack.artist} — {w.topTrack.plays} plays
+                      {w.topTrack.artist} · {w.topTrack.plays} plays
                     </p>
                   </div>
                 )}
@@ -111,7 +111,7 @@ function TopList({ title, items }: { title: string; items: { name: string; plays
     <div>
       <Label>{title}</Label>
       <ol className="mt-2 space-y-1.5">
-        {items.length === 0 && <li className="text-[12px] text-dim">—</li>}
+        {items.length === 0 && <li className="text-[12px] text-dim">なし</li>}
         {items.map((it, i) => (
           <li key={it.name} className="flex items-baseline gap-2 text-[13px]">
             <span className="font-mono text-[10px] text-dim">{String(i + 1).padStart(2, "0")}</span>

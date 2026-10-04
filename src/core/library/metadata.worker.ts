@@ -41,8 +41,12 @@ function titleFromFileName(name: string): { title: string; trackNo: number | nul
     trackNo = parseInt(lead[1], 10);
     base = lead[2];
   }
-  return { title: base.trim() || name, trackNo };
+  return { title: base.trim() || name, trackNo: trackNo };
 }
+
+/** Video containers keep their extension as the format: the parsed container
+ *  brand ("isom/iso2") or codec ("vp9") would fail isVideoFormat downstream. */
+const VIDEO_CONTAINER_EXTS = new Set(["mp4", "m4v", "mov", "mkv"]);
 
 self.onmessage = async (ev: MessageEvent<ParseRequest>) => {
   const { id, file } = ev.data;
@@ -51,7 +55,10 @@ self.onmessage = async (ev: MessageEvent<ParseRequest>) => {
     const c = mm.common;
     const container = (mm.format.container ?? file.type ?? "").toString();
     const codec = (mm.format.codec ?? "").toString();
-    const fmt = (codec || container || file.name.split(".").pop() || "").toLowerCase();
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    const fmt = VIDEO_CONTAINER_EXTS.has(ext)
+      ? ext
+      : (codec || container || ext).toLowerCase();
     const fallback = titleFromFileName(file.name);
     const artists = (c.artists ?? (c.artist ? [c.artist] : [])).filter(Boolean);
 

@@ -5,7 +5,7 @@ import { resolveVisualSource, useVisual, type VisualSource } from "@/core/librar
 import { isVideoFormat, type TrackMeta } from "@/core/library/types";
 
 /**
- * TrackVisual — the canvas layer. Shows an attached clip/gif (looping) or a
+ * TrackVisual: the canvas layer. Shows an attached clip/gif (looping) or a
  * video track's picture, synced to the audio clock: play/pause follow the
  * engine, drift beyond 350ms snaps back. GIFs just loop on their own clock.
  */
@@ -23,7 +23,6 @@ export function TrackVisual({
   const [source, setSource] = useState<VisualSource | null>(null);
   const [failed, setFailed] = useState(false);
   const mediaRef = useRef<HTMLVideoElement>(null);
-  const lastTrackId = useRef<number | null>(null);
 
   // resolve the source per track
   useEffect(() => {
@@ -40,10 +39,14 @@ export function TrackVisual({
         return;
       }
       setSource(src);
-      lastTrackId.current = track.id;
     });
     return () => {
       alive = false;
+      // unmount (e.g. closing Now Playing): release the URL we were showing
+      setSource((prev) => {
+        if (prev?.owned) URL.revokeObjectURL(prev.url);
+        return null;
+      });
     };
   }, [track.id, track.path]);
 
@@ -95,7 +98,7 @@ export function TrackVisual({
       className={className}
       style={radius}
       onEnded={(e) => {
-        // video-file tracks end with the audio — hold the last frame
+        // video-file tracks end with the audio: hold the last frame
         (e.currentTarget as HTMLVideoElement).pause();
       }}
     />

@@ -3,9 +3,12 @@ import { useEffect, useState } from "react";
 import { db, type TrackVisual } from "./db";
 import { isVideoFormat, type TrackMeta } from "./types";
 import { cachedTrackUrl, streamUrlFor } from "@/core/cloud/cloudService";
+import { captureVideoPoster } from "./videoPoster";
+import { posterKey } from "./importService";
+import { storeCover } from "./coverCache";
 
 /**
- * Track visuals — the Spotify-canvas layer. Two flavors:
+ * Track visuals: the Spotify-canvas layer. Two flavors:
  *  - attached clip/gif: a separate video/gif stored in Dexie, looping beside the audio
  *  - video tracks: the source file IS a video container; its picture plays in sync
  */
@@ -54,6 +57,26 @@ export interface VisualSource {
   owned: boolean;
 }
 
+/** Session record of poster backfill attempts: a failed capture shouldn't
+ *  retry on every play. */
+const posterTried = new Set<number>();
+
+/** One-shot cover backfill: video files carry no embedded art, so a grabbed
+ *  frame becomes the cover for tracks imported before poster capture existed. */
+async function backfillPoster(track: TrackMeta, file: File): Promise<void> {
+  if (posterTried.has(track.id)) return;
+  posterTried.add(track.id);
+  try {
+    const poster = await captureVideoPoster(file);
+    if (!poster) return;
+    const key = posterKey(track.path);
+    await storeCover(key, poster);
+    await db.tracks.update(track.id, { coverKey: key });
+  } catch {
+    // best-effort: the placeholder tile is an acceptable fallback
+  }
+}
+
 /**
  * Resolve what to show for a track: an attached clip/gif wins, then a video
  * source file (local handle/blob or cloud stream). Null = nothing attached.
@@ -95,5 +118,6 @@ export async function resolveVisualSource(track: TrackMeta): Promise<VisualSourc
     file = src?.file ?? null;
   }
   if (!file) return null;
+  if (!track.coverKey) void backfillPoster(track, file);
   return { url: URL.createObjectURL(file), kind: "video", loop: false, owned: true };
 }

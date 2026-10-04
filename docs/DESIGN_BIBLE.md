@@ -1,4 +1,4 @@
-# ATRI Design Bible — v0.1
+# ATRI Design Bible (v0.1)
 
 The visual law of Atori: **the player is the stage; the music is the light.**
 Everything flashy must serve playback comprehension. When in doubt, subtract.
@@ -38,7 +38,7 @@ is for metadata only, never for actions.
 - Screen transitions: Director uses `mode="wait"` enter/exit with
   x-slide + skew (expo-out `[0.16, 1, 0.3, 1]`).
 - Springs: Motion springs for layout/shared-element; GSAP timelines for
-  choreography (boot, cut-in) — never mix loops.
+  choreography (boot, cut-in); never mix loops.
 - Frame-driven widgets (seek fill, spectrum, progress line) write
   `transform` imperatively in rAF. No per-frame React state. Ever.
 - **Calm mode**: fades only, shader time frozen, cut-ins disabled.
@@ -85,6 +85,6 @@ default in calm mode. Every sound has a visual twin; neither is required.
 ## 8. Accessibility bar
 
 - Full keyboard path for transport + navigation; visible focus rings
-- Calm mode is first-class, not an afterthought
+- Calm mode is a first-class mode
 - Icon-only buttons carry `aria-label`/`title`
 - Grade colors always paired with text labels or tooltips

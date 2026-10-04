@@ -3,7 +3,7 @@ import gsap from "gsap";
 import { useUi } from "@/state/uiStore";
 
 /**
- * KineticText — per-character staggered entrance.
+ * KineticText: per-character staggered entrance.
  * Re-runs whenever `text` changes (titles on track change).
  * Calm mode degrades to a plain fade.
  */

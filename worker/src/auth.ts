@@ -1,5 +1,5 @@
 /**
- * Auth helpers — email/password accounts + session tokens, Workers-native.
+ * Auth helpers: email/password accounts + session tokens, Workers-native.
  *
  * Passwords: PBKDF2-SHA-256 via WebCrypto (no deps). If the free-plan CPU
  * cap rejects the 100k iterations, lower PBKDF2_ITERATIONS to 25_000.
@@ -16,6 +16,10 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string;
+  /** admins manage the shared catalogue (catalogue/* keys) */
+  admin: boolean;
+  /** epoch ms the account was created */
+  createdAt: number;
 }
 
 /* ---------- encoding ---------- */
@@ -90,10 +94,10 @@ export async function userForToken(db: D1Database, token: string): Promise<Sessi
   const now = Date.now();
   const row = await db
     .prepare(
-      "SELECT u.id, u.email, u.name, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?",
+      "SELECT u.id, u.email, u.name, u.is_admin, u.created_at, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?",
     )
     .bind(tokenHash)
-    .first<{ id: string; email: string; name: string; expires_at: number }>();
+    .first<{ id: string; email: string; name: string; is_admin: number; created_at: number; expires_at: number }>();
   if (!row) return null;
   if (row.expires_at < now) {
     await db.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(tokenHash).run();
@@ -102,7 +106,7 @@ export async function userForToken(db: D1Database, token: string): Promise<Sessi
   if (row.expires_at - now < SESSION_RENEW_MS) {
     await db.prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ?").bind(now + SESSION_TTL_MS, tokenHash).run();
   }
-  return { id: row.id, email: row.email, name: row.name };
+  return { id: row.id, email: row.email, name: row.name, admin: !!row.is_admin, createdAt: row.created_at };
 }
 
 export async function deleteSession(db: D1Database, token: string): Promise<void> {
@@ -133,6 +137,11 @@ export function clearAttempts(key: string): void {
 /* ---------- validation ---------- */
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** shared email shape check for registration and account-email changes */
+export function isValidEmail(email: string): boolean {
+  return EMAIL_RE.test(email);
+}
 
 export function validateRegistration(email: string, password: string, name: string): string | null {
   if (!EMAIL_RE.test(email)) return "Enter a valid email address";

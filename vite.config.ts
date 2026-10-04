@@ -11,7 +11,7 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     watch: {
-      // wrangler state + demo assets churn constantly — don't full-reload the app.
+      // wrangler state + demo assets churn constantly: don't full-reload the app.
       // .mimosa hook-state writes caused an HMR/reload storm (blank page).
       ignored: ["**/worker/**", "**/.wrangler/**", "**/dist/**", "**/.mimosa/**"],
     },

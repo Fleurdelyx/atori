@@ -4,7 +4,7 @@ import { needsReconnect, requestAllPermissions } from "@/core/library/fsPermissi
 import { toast } from "@/state/toastStore";
 
 /**
- * ReconnectBanner — after a restart, FS-Access directory handles need one
+ * ReconnectBanner: after a restart, FS-Access directory handles need one
  * user-gesture permission grant. Shows a banner when that's the case.
  */
 export function ReconnectBanner() {
@@ -30,7 +30,7 @@ export function ReconnectBanner() {
       setNeeds(!ok);
       setBusy(false);
       toast(
-        ok ? "Music folders reconnected" : "Permission denied — playback unavailable",
+        ok ? "Music folders reconnected" : "Permission denied: playback unavailable",
         ok ? "success" : "error",
         ok ? "再接続完了" : "拒否されました",
       );

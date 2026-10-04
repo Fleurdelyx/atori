@@ -1,5 +1,5 @@
 /**
- * FxDirector — imperative FX bus.
+ * FxDirector: imperative FX bus.
  * UI code calls fx.trackChange() / fx.impact() / fx.wipe();
  * ShaderStage (and later DOM effects) subscribe.
  */
@@ -20,7 +20,7 @@ class FxDirector {
     return () => this.wipeHandlers.delete(h);
   }
 
-  /** Punchy moment — play/pause, big button press. */
+  /** Punchy moment: play/pause, big button press. */
   impact(strength = 1) {
     this.impactHandlers.forEach((h) => h(strength));
   }

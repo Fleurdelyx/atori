@@ -9,7 +9,7 @@ import { getBgStyle } from "./bgStyles";
 import { VERT, buildFragment } from "./shaders";
 
 /**
- * ShaderStage — one fullscreen WebGL canvas behind the whole app.
+ * ShaderStage: one fullscreen WebGL canvas behind the whole app.
  * Renders the active skin's background shader with audio-reactive
  * uniforms. All mutation is imperative; React never re-renders per frame.
  */
@@ -39,7 +39,7 @@ export function ShaderStage() {
         powerPreference: "high-performance",
       });
     } catch {
-      return; // no WebGL — page background color still carries the skin
+      return; // no WebGL: page background color still carries the skin
     }
     rendererRef.current = renderer;
 
@@ -117,7 +117,7 @@ export function ShaderStage() {
       uniforms.uMid.value = audioLevels.mid;
       uniforms.uTreble.value = audioLevels.treble;
       uniforms.uLevel.value = audioLevels.level;
-      // fast attack / slow decay per band — fluid bars, no strobe
+      // fast attack / slow decay per band: fluid bars, no strobe
       for (let i = 0; i < 32; i++) {
         const v = audioLevels.bands[i] ?? 0;
         bandSmooth[i] = v > bandSmooth[i] ? v : Math.max(v, bandSmooth[i] - dt * 1.4);

@@ -4,7 +4,7 @@ import { engine } from "@/core/audio/AudioEngine";
 import { useUi } from "@/state/uiStore";
 
 /**
- * LyricsSheet — karaoke-style synced lyrics when the track carries LRC
+ * LyricsSheet: karaoke-style synced lyrics when the track carries LRC
  * timestamps; a static sheet otherwise. Active-line tracking is done
  * imperatively in one rAF (no React re-renders while playing).
  */
@@ -66,7 +66,7 @@ export function LyricsSheet({ raw }: { raw: string }) {
         <button
           onClick={() => setLrcOffset(lrcOffset - 500)}
           className="font-mono text-[10px] text-dim hover:text-accent"
-          title="lines were late — show them sooner"
+          title="lines were late: show them sooner"
         >
           −0.5s
         </button>
@@ -79,7 +79,7 @@ export function LyricsSheet({ raw }: { raw: string }) {
         <button
           onClick={() => setLrcOffset(lrcOffset + 500)}
           className="font-mono text-[10px] text-dim hover:text-accent"
-          title="lines were early — show them later"
+          title="lines were early: show them later"
         >
           +0.5s
         </button>

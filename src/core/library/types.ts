@@ -25,14 +25,17 @@ export interface TrackMeta {
   lossless: boolean;
   grade: Grade;
   coverKey: string | null;
-  /** raw lyric text — LRC-timestamped when available, plain otherwise */
+  /** raw lyric text: LRC-timestamped when available, plain otherwise */
   lyrics?: string;
   /** learned loudness correction in dB (smart volume; null while unmeasured) */
   gainDb?: number;
-  /** the source file is a video container — playable in the visual panel/theatre */
+  /** the source file is a video container: playable in the visual panel/theatre */
   hasVideo?: boolean;
   /** playback origin: local file or cloud object (path = R2 object key) */
   source?: "local" | "cloud";
+  /** this song also exists in the server's shared catalogue (follows the
+   *  surviving copy of the merge, which may be a local or personal one) */
+  inCatalogue?: boolean;
   /** false = the browser cannot decode this codec */
   playable?: boolean;
   addedAt: number;
@@ -40,12 +43,19 @@ export interface TrackMeta {
   lastPlayedAt: number | null;
 }
 
-/** Video containers accepted at import — they play as tracks (audio) and show
+/** Video containers accepted at import: they play as tracks (audio) and show
  *  their picture in the visual panel / theatre mode. */
 export const VIDEO_EXTENSIONS = new Set(["mp4", "m4v", "webm", "mov", "mkv"]);
 
+/** Container brands / video codecs that also mean "has a video track": covers
+ *  legacy rows that stored the raw MP4 brand ("isomiso2") and webm codec names
+ *  ("vp9" for video vs "opus"/"vorbis" for audio-only). No audio format or
+ *  codec contains these substrings. */
+const VIDEO_FORMAT_HINTS = /isom|iso2|quicktime|matroska|vp8|vp9|av01|av1|hvc1|hevc|avc/;
+
 export function isVideoFormat(format: string): boolean {
-  return VIDEO_EXTENSIONS.has(format.toLowerCase());
+  const f = format.toLowerCase();
+  return VIDEO_EXTENSIONS.has(f) || VIDEO_FORMAT_HINTS.test(f);
 }
 
 /** Formats Chromium-based engines cannot decode. */

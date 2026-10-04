@@ -5,6 +5,7 @@ import { useUi } from "@/state/uiStore";
 import { useDexie } from "@/core/library/useLibrary";
 import { db } from "@/core/library/db";
 import { splitGenres } from "@/core/library/types";
+import { parseLrc } from "@/core/library/lrc";
 import { toast } from "@/state/toastStore";
 
 /** comma / 、 separated free-text list (slashes stay inside single names here) */
@@ -16,7 +17,7 @@ function splitList(raw: string): string[] {
 }
 
 /**
- * EditTrackPanel — metadata editor over the local Dexie record. Edits are
+ * EditTrackPanel: metadata editor over the local Dexie record. Edits are
  * library-side only: the audio file's embedded tags and the cloud manifest
  * copy are untouched, and album regrouping happens via the live query.
  */
@@ -34,6 +35,7 @@ export function EditTrackPanel() {
   const [albumArtist, setAlbumArtist] = useState("");
   const [year, setYear] = useState("");
   const [genre, setGenre] = useState("");
+  const [lyrics, setLyrics] = useState("");
 
   useEffect(() => {
     if (track) {
@@ -43,23 +45,58 @@ export function EditTrackPanel() {
       setAlbumArtist(track.albumArtist);
       setYear(track.year === null ? "" : String(track.year));
       setGenre(track.genre.join(", "));
+      setLyrics(track.lyrics ?? "");
     }
   }, [track]);
 
   const open = editTrackId !== null && !!track;
   const save = () => {
     if (!track) return;
+    // blank fields save as "Unknown" rather than keeping the previous value
     const artistList = splitList(artists);
     const parsedYear = parseInt(year, 10);
+    const nextTitle = title.trim() || "Unknown";
+    const nextArtist = artistList[0] ?? "Unknown";
+    const nextAlbum = album.trim() || "Unknown";
+    const nextAlbumArtist = albumArtist.trim() || "Unknown";
     void db.tracks.update(track.id, {
-      title: title.trim() || track.title,
-      artist: artistList[0] ?? track.artist,
-      artists: artistList,
-      album: album.trim() || track.album,
-      albumArtist: albumArtist.trim() || track.albumArtist,
+      title: nextTitle,
+      artist: nextArtist,
+      artists: artistList.length ? artistList : ["Unknown"],
+      album: nextAlbum,
+      albumArtist: nextAlbumArtist,
       year: Number.isFinite(parsedYear) ? parsedYear : null,
       genre: splitGenres(splitList(genre)),
+      // empty string removes the property: Dexie drops undefined keys
+      lyrics: lyrics.trim() === "" ? undefined : lyrics,
     });
+    // cloud tracks: propagate the metadata to the server manifest so every
+    // device sees the edit: locally the shadow row already reflects it
+    if (track.source === "cloud") {
+      void (async () => {
+        try {
+          const { withManifestLock, fetchManifest, putManifest } = await import("@/core/cloud/cloudService");
+          const { useCloud } = await import("@/core/cloud/cloudStore");
+          await withManifestLock(async () => {
+            const m = await fetchManifest();
+            const entry = m.tracks.find((t) => t.key === track.path);
+            if (!entry) return;
+            entry.title = nextTitle;
+            entry.artist = nextArtist;
+            entry.artists = artistList.length ? artistList : ["Unknown"];
+            entry.album = nextAlbum;
+            entry.albumArtist = nextAlbumArtist;
+            entry.year = Number.isFinite(parsedYear) ? parsedYear : null;
+            entry.genre = splitGenres(splitList(genre));
+            entry.lyrics = lyrics.trim() || null;
+            await putManifest(m);
+          });
+          await useCloud.getState().refresh();
+        } catch {
+          toast("Saved locally (cloud metadata update failed)", "error", "同期失敗");
+        }
+      })();
+    }
     setEditTrackId(null);
     toast("Track updated", "success", "編集を保存");
   };
@@ -115,10 +152,33 @@ export function EditTrackPanel() {
               {field("ALBUM ARTIST", albumArtist, setAlbumArtist, "Album artist")}
               {field("YEAR 年", year, setYear, "YYYY")}
               {field("TAGS タグ", genre, setGenre, "comma separated")}
+              <label className="block sm:col-span-2">
+                <span className="font-mono mb-1 flex items-center justify-between text-[9px] tracking-[0.3em] text-dim">
+                  LYRICS 歌詞
+                  {(() => {
+                    const parsed = lyrics.trim() === "" ? null : parseLrc(lyrics);
+                    if (parsed === null && lyrics.trim() === "") return null;
+                    return parsed ? (
+                      <span style={{ color: "var(--ato-accent)" }}>SYNCED LRC: {parsed.length} LINES</span>
+                    ) : (
+                      <span>PLAIN TEXT: STATIC SHEET</span>
+                    );
+                  })()}
+                </span>
+                <textarea
+                  value={lyrics}
+                  onChange={(e) => setLyrics(e.target.value)}
+                  rows={7}
+                  spellCheck={false}
+                  placeholder={"Paste plain text or timed LRC:\n[00:12.50]first line\n[00:18.04]second line"}
+                  className="font-mono w-full resize-y bg-transparent px-3 py-2 text-xs leading-relaxed outline-none"
+                  style={{ border: "1px solid var(--ato-border)" }}
+                />
+              </label>
             </div>
             <div className="flex items-center justify-between border-t border-line px-5 py-4">
               <span className="font-mono text-[9px] tracking-[0.15em] text-dim">
-                EDITS ARE LIBRARY-SIDE — FILE TAGS STAY UNTOUCHED
+                EDITS ARE LIBRARY-SIDE: FILE TAGS STAY UNTOUCHED
               </span>
               <button
                 onClick={save}

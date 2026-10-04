@@ -1,7 +1,7 @@
 import type { SkinDef } from "./types";
 
 /**
- * NEON GACHA FUSION — the default skin.
+ * NEON GACHA FUSION: the default skin.
  * Arknights-style charcoal UI, neon magenta/cyan, gold foil accents,
  * glitch kinetic type, perspective grid + speed-streak shader.
  */
@@ -47,8 +47,8 @@ vec3 BG(vec2 p) {
 
   // audio-reactive neon blobs (bass -> magenta, mid -> cyan)
   float b1 = 0.55 + uBass * 0.9;
-  float g1 = glow(p, vec2(sin(t) * 0.62, cos(t * 0.71) * 0.34), b1, uA);
-  float g2 = glow(p, vec2(-sin(t * 0.83) * 0.66, sin(t * 0.52 + 1.7) * 0.38), 0.42 + uMid * 0.6, uB);
+  vec3 g1 = glow(p, vec2(sin(t) * 0.62, cos(t * 0.71) * 0.34), b1, uA);
+  vec3 g2 = glow(p, vec2(-sin(t * 0.83) * 0.66, sin(t * 0.52 + 1.7) * 0.38), 0.42 + uMid * 0.6, uB);
   col += g1 * 0.85 + g2 * 0.7;
 
   if (uQuality > 0.72) {

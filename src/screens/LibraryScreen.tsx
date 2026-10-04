@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, ListMusic, Play, Plus, RefreshCw, Search, Share2, Shuffle, Trash2, X, Zap } from "lucide-react";
+import type { MouseEvent as ReactMouseEvent } from "react";
+import { Download, Heart, Image as ImageIcon, ListMusic, Pin, Play, Plus, RefreshCw, Search, Share2, Shuffle, Trash2, X, Zap } from "lucide-react";
 import { useAlbums, useAllTracks, useArtists, useDexie, useTagStats, trackHasTag, splitGenres, type ArtistInfo } from "@/core/library/useLibrary";
 import { db } from "@/core/library/db";
 import {
@@ -13,39 +14,48 @@ import {
 } from "@/core/library/playlists";
 import { createSmartPlaylist, deleteSmartPlaylist, matchSmartPlaylist, useSmartPlaylists } from "@/core/library/smartPlaylists";
 import { useCloud } from "@/core/cloud/cloudStore";
-import { manifestToTracks } from "@/core/cloud/cloudService";
+import { cloudConfigured, cloudMode, isCatalogueTrack, manifestToTracks, resolveSourceFile, uploadTracks } from "@/core/cloud/cloudService";
+import { useCatalogue } from "@/core/cloud/catalogueStore";
 import { useCloudPlaylists } from "@/core/cloud/playlistStore";
 import { AlbumCard, DirectoryInput, TrackRow } from "@/ui/components";
 import { VirtualTrackList } from "@/ui/kit/VirtualTrackList";
 import { AddUrlPanel } from "@/ui/kit/AddUrlPanel";
 import { PlaylistCover } from "@/ui/kit/PlaylistCover";
+import { PictureCropper } from "@/ui/kit/PictureCropper";
 import { supportsDirectoryPicker } from "@/core/library/importService";
 import { matchTrack } from "@/core/library/search";
-import { showTagMenu } from "@/ui/menus";
+import { showTagMenu, showPlaylistMenu } from "@/ui/menus";
+import { ScrollFade } from "@/ui/kit/ScrollFade";
 import { showContextMenu } from "@/state/contextMenuStore";
 import { isCached, createShare } from "@/core/cloud/cloudService";
 import { useImporter } from "@/hooks/useImporter";
 import { usePlayback } from "@/core/audio/playbackStore";
+import { useUi } from "@/state/uiStore";
 import { fx } from "@/fx/FxDirector";
 import { toast } from "@/state/toastStore";
+import { confirm } from "@/state/confirmStore";
+import { useFavorites } from "@/core/cloud/favoritesStore";
+import { useCataloguePlaylists } from "@/core/cloud/cataloguePlaylistStore";
+import { CataloguePlaylistCover } from "@/ui/kit/CataloguePlaylistCover";
 import type { Playlist } from "@/core/library/db";
 import type { TrackMeta } from "@/core/library/types";
 
 type Tab = "albums" | "artists" | "tracks" | "playlists";
-type Scope = "all" | "local" | "cloud" | "offline";
+type Scope = "all" | "local" | "cloud" | "catalogue" | "offline";
 
 const SCOPES: { id: Scope; label: string }[] = [
   { id: "all", label: "ALL" },
   { id: "local", label: "LOCAL" },
   { id: "cloud", label: "CLOUD" },
+  { id: "catalogue", label: "CATALOGUE" },
   { id: "offline", label: "OFFLINE" },
 ];
 
 const TABS: { id: Tab; label: string; jp: string }[] = [
-  { id: "albums", label: "ALBUMS", jp: "アルバム" },
-  { id: "artists", label: "ARTISTS", jp: "アーティスト" },
   { id: "tracks", label: "TRACKS", jp: "トラック" },
   { id: "playlists", label: "PLAYLISTS", jp: "プレイリスト" },
+  { id: "albums", label: "ALBUMS", jp: "アルバム" },
+  { id: "artists", label: "ARTISTS", jp: "アーティスト" },
 ];
 
 /** Max chips that ever populate the popular-tags row, regardless of vocabulary size. */
@@ -59,8 +69,32 @@ const ALBUM_SORTS: { id: AlbumSort; label: string }[] = [
 ];
 
 export function LibraryScreen() {
-  const [tab, setTab] = useState<Tab>("albums");
-  const [filter, setFilter] = useState("");
+  const [tab, setTab] = useState<Tab>("tracks");
+  const playlistFocus = useUi((s) => s.playlistFocus);
+  const likedFocus = useUi((s) => s.likedFocus);
+  const savedCatalogueFocus = useUi((s) => s.savedCatalogueFocus);
+  const cloudPlaylistFocus = useUi((s) => s.cloudPlaylistFocus);
+  const artistFocus = useUi((s) => s.artistFocus);
+  // PINNED rail click lands here first: flip to the playlists tab, and the
+  // pane (mounting with the tab) picks up the selection itself
+  useEffect(() => {
+    if (playlistFocus) setTab("playlists");
+  }, [playlistFocus]);
+  // ...and so can Liked Songs from the rail
+  useEffect(() => {
+    if (likedFocus) setTab("playlists");
+  }, [likedFocus]);
+  // ...and saved catalogue playlists
+  useEffect(() => {
+    if (savedCatalogueFocus) setTab("playlists");
+  }, [savedCatalogueFocus]);
+  // Home search signals: open the cloud playlist, or land on the artist page
+  useEffect(() => {
+    if (cloudPlaylistFocus) setTab("playlists");
+  }, [cloudPlaylistFocus]);
+  useEffect(() => {
+    if (artistFocus) setTab("artists");
+  }, [artistFocus]);
   const [selectedArtist, setSelectedArtist] = useState<ArtistInfo | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [albumSort, setAlbumSort] = useState<AlbumSort>("recent");
@@ -77,6 +111,9 @@ export function LibraryScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchTagOpen, setBatchTagOpen] = useState(false);
   const [batchTagValue, setBatchTagValue] = useState("");
+  // the filter text lives in the ui store so Home's search bar can prefill it
+  const filter = useUi((s) => s.libraryFilter);
+  const setFilter = useUi((s) => s.setLibraryFilter);
 
   const toggleSelect = (id: number) =>
     setSelectedIds((prev) => {
@@ -93,6 +130,14 @@ export function LibraryScreen() {
   };
 
   const q = filter.trim().toLowerCase();
+  // opening the CATALOGUE scope with no manifest (boot fetch failed, stale
+  // session, server switched elsewhere) retries the pull instead of showing
+  // a silently empty list
+  useEffect(() => {
+    if (scope !== "catalogue") return;
+    const c = useCatalogue.getState();
+    if (cloudMode() === "account" && c.manifest === null && c.status !== "loading") void c.refresh();
+  }, [scope]);
   // OFFLINE needs to know which cloud tracks are already in the Cache API
   useEffect(() => {
     if (scope !== "offline") return;
@@ -112,7 +157,10 @@ export function LibraryScreen() {
   const matchesScope = (t: TrackMeta) => {
     const cloud = t.source === "cloud";
     if (scope === "local") return !cloud;
-    if (scope === "cloud") return cloud;
+    // CLOUD = the personal namespace; CATALOGUE = any song published to the
+    // shared catalogue (the visible copy may be the local one — same song)
+    if (scope === "cloud") return cloud && !isCatalogueTrack(t);
+    if (scope === "catalogue") return isCatalogueTrack(t);
     if (scope === "offline") return cloud && cachedPaths.has(t.path);
     return true;
   };
@@ -142,7 +190,7 @@ export function LibraryScreen() {
     return { filteredTracks: list, lyricsHits: hits.size > 0 ? hits : undefined };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tracks, q, selectedTag, scope, cachedPaths]);
-  // artists matching the active tag — same name rule as groupArtists
+  // artists matching the active tag: same name rule as groupArtists
   const shownArtists = useMemo(() => {
     if (!selectedTag) return artists;
     const names = new Set<string>();
@@ -212,7 +260,7 @@ export function LibraryScreen() {
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="FILTER…"
+              placeholder="SEARCH…"
               className="font-mono w-44 bg-transparent text-[11px] tracking-[0.2em] outline-none placeholder:text-dim"
             />
           </label>
@@ -244,30 +292,41 @@ export function LibraryScreen() {
         ))}
       </div>
 
-      {/* library scope — all / local / cloud / offline-cached */}
+      {/* library mode: all / local / cloud / offline-cached */}
       {tab !== "playlists" && (
         <div className="mb-5 flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[9px] tracking-[0.3em] text-dim">SCOPE 種別</span>
-          {SCOPES.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setScope(s.id)}
-              className="clip-tag px-3 py-1 transition-colors"
-              style={{
-                background: scope === s.id ? "var(--ato-accent)" : "color-mix(in srgb, var(--ato-text) 6%, transparent)",
-                color: scope === s.id ? "var(--ato-bg)" : "var(--ato-text-dim)",
-              }}
-            >
-              <span className="font-mono text-[9px] font-bold tracking-[0.2em]">{s.label}</span>
-            </button>
-          ))}
+          <span className="font-mono text-[10px] font-bold tracking-[0.3em]" style={{ color: "var(--ato-text)" }}>
+            MODE <span className="font-jp text-[9px] font-normal opacity-70">種別</span>
+          </span>
+          {SCOPES.map((s) => {
+            const active = scope === s.id;
+            return (
+              <button
+                key={s.id}
+                onClick={() => setScope(s.id)}
+                className="clip-tag px-3.5 py-1.5 transition-all"
+                style={{
+                  background: active
+                    ? "var(--ato-accent)"
+                    : "color-mix(in srgb, var(--ato-text) 10%, transparent)",
+                  color: active ? "var(--ato-bg)" : "var(--ato-text)",
+                  border: `1px solid ${active ? "var(--ato-accent)" : "var(--ato-border)"}`,
+                  boxShadow: active ? "0 0 14px color-mix(in srgb, var(--ato-accent) 35%, transparent)" : "none",
+                }}
+              >
+                <span className="font-mono text-[10px] font-bold tracking-[0.2em]">{s.label}</span>
+              </button>
+            );
+          })}
         </div>
       )}
 
-      {/* popular tags — capped at POPULAR_TAG_LIMIT chips; right-click pins one as a playlist */}
+      {/* popular tags: capped at POPULAR_TAG_LIMIT chips; right-click pins one as a playlist */}
       {tagStats.length > 0 && tab !== "playlists" && (
         <div className="mb-5 flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[9px] tracking-[0.3em] text-dim">TAGS タグ</span>
+          <span className="font-mono text-[10px] font-bold tracking-[0.3em]" style={{ color: "var(--ato-text)" }}>
+            TAGS <span className="font-jp text-[9px] font-normal opacity-70">タグ</span>
+          </span>
           {tagStats.slice(0, POPULAR_TAG_LIMIT).map((s) => {
             const active = selectedTag === s.key;
             return (
@@ -278,14 +337,15 @@ export function LibraryScreen() {
                   e.preventDefault();
                   showTagMenu(e, s, tracks);
                 }}
-                className="clip-tag px-3 py-1.5 transition-colors"
+                className="clip-tag px-3.5 py-1.5 transition-all"
                 style={{
                   background: active
-                    ? "var(--ato-accent)"
-                    : "color-mix(in srgb, var(--ato-text) 6%, transparent)",
-                  color: active ? "var(--ato-bg)" : "var(--ato-text-dim)",
+                    ? "var(--ato-accent-2)"
+                    : "color-mix(in srgb, var(--ato-accent-2) 12%, transparent)",
+                  color: active ? "var(--ato-bg)" : "var(--ato-accent-2)",
+                  border: `1px solid ${active ? "var(--ato-accent-2)" : "color-mix(in srgb, var(--ato-accent-2) 35%, transparent)"}`,
                 }}
-                title={`${s.count} tracks — right-click to pin as playlist`}
+                title={`${s.count} tracks: right-click to pin as playlist`}
               >
                 <span className="font-mono text-[10px] font-bold tracking-[0.2em]">{s.label.toUpperCase()}</span>
                 <span className="font-mono ml-2 text-[9px] opacity-60">{s.count}</span>
@@ -300,7 +360,7 @@ export function LibraryScreen() {
           <div className="py-16 text-center">
             <ListMusic className="mx-auto h-10 w-10 text-dim" strokeWidth={1.4} />
             <p className="mt-4 text-sm text-dim">
-              Nothing here yet —{" "}
+              Nothing here yet:{" "}
               <button className="underline hover:text-accent" onClick={() => void importDir()}>
                 import a folder
               </button>{" "}
@@ -309,7 +369,7 @@ export function LibraryScreen() {
           </div>
         </div>
       ) : tab === "albums" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto pb-6">
+        <ScrollFade className="min-h-0 flex-1 overflow-y-auto pb-6">
           <div className="mb-4 flex items-center gap-2">
             <span className="font-mono text-[9px] tracking-[0.3em] text-dim">SORT 並び</span>
             {ALBUM_SORTS.map((s) => (
@@ -333,11 +393,11 @@ export function LibraryScreen() {
             ))}
             {sortedAlbums.length === 0 && <p className="text-sm text-dim">{noMatch}</p>}
           </div>
-        </div>
+        </ScrollFade>
       ) : tab === "artists" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto pb-6">
+        <ScrollFade className="min-h-0 flex-1 overflow-y-auto pb-6">
           <ArtistPane artists={shownArtists} selected={selectedArtist} onSelect={setSelectedArtist} />
-        </div>
+        </ScrollFade>
       ) : tab === "tracks" ? (
         <div className="flex min-h-0 flex-1 flex-col">
           {/* batch select bar */}
@@ -361,7 +421,7 @@ export function LibraryScreen() {
             {selectMode && (
               <>
                 <span className="font-mono text-[9px] tracking-[0.2em] text-dim">
-                  {selectedIds.size} SELECTED — CLICK ROWS TO TOGGLE
+                  {selectedIds.size} SELECTED: CLICK ROWS TO TOGGLE
                 </span>
                 <button
                   disabled={selectedIds.size === 0}
@@ -376,7 +436,7 @@ export function LibraryScreen() {
                   onClick={(e) => {
                     const picked = filteredTracks.filter((t) => selectedIds.has(t.id));
                     if (picked.some((t) => t.source === "cloud")) {
-                      toast("Cloud tracks go to cloud playlists — pick local tracks only", "error", "混在できません");
+                      toast("Cloud tracks go to cloud playlists: pick local tracks only", "error", "混在できません");
                       return;
                     }
                     const items = [
@@ -392,13 +452,10 @@ export function LibraryScreen() {
                       {
                         label: "＋ New playlist",
                         jp: "新規",
-                        run: () => {
-                          void createPlaylist("New Playlist").then((id) =>
-                            addToPlaylist(id, [...selectedIds]).then(() =>
-                              toast("Playlist created", "success", "プレイリストを作成"),
-                            ),
-                          );
-                        },
+                        run: () =>
+                          useUi.getState().setPlaylistCreate({
+                            seedTrackIds: [...selectedIds],
+                          }),
                       },
                     ];
                     showContextMenu(e, items);
@@ -491,8 +548,16 @@ function ArtistPane({
 }) {
   const albums = useAlbums();
   const allTracks = useAllTracks();
+  const artistFocus = useUi((s) => s.artistFocus);
   const [sort, setSort] = useState<"count" | "name">("count");
   const shown = selected ? albums.filter((a) => selected.albumKeys.includes(a.key)) : [];
+  // Home search hands over an artist name: select it once the list resolves
+  useEffect(() => {
+    if (!artistFocus) return;
+    const a = artists.find((x) => x.name === artistFocus.name);
+    if (a) onSelect(a);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [artistFocus, artists]);
   // artist page: their most-played tracks, Spotify-style
   const topTracks = useMemo(() => {
     if (!selected) return [];
@@ -571,9 +636,14 @@ function ArtistPane({
   );
 }
 
-/** PLAYLISTS tab — LOCAL (Dexie) and CLOUD (account) playlists, kept separate. */
+/** PLAYLISTS tab: LOCAL (Dexie) and CLOUD (account) playlists, kept separate. */
 function PlaylistsPane() {
   const [scope, setScope] = useState<"local" | "cloud">("local");
+  const cloudPlaylistFocus = useUi((s) => s.cloudPlaylistFocus);
+  // arriving via a Home search hit on a cloud playlist flips the scope
+  useEffect(() => {
+    if (cloudPlaylistFocus) setScope("cloud");
+  }, [cloudPlaylistFocus]);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="mb-4 flex gap-2">
@@ -602,15 +672,21 @@ function PlaylistsPane() {
   );
 }
 
-/** CLOUD scope — account playlists referencing cloud object keys. */
+/** CLOUD scope: account playlists referencing cloud object keys. */
 function CloudPlaylistsPane() {
   const playlists = useCloudPlaylists((s) => s.playlists);
+  const cloudPlaylistFocus = useUi((s) => s.cloudPlaylistFocus);
   const plCreate = useCloudPlaylists((s) => s.create);
   const plRemove = useCloudPlaylists((s) => s.remove);
   const manifest = useCloud((s) => s.manifest);
   const playQueue = usePlayback((s) => s.playQueue);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+
+  // Home search hands over a cloud playlist id
+  useEffect(() => {
+    if (cloudPlaylistFocus) setSelectedId(cloudPlaylistFocus.id);
+  }, [cloudPlaylistFocus]);
 
   const cloudTracks = useMemo(() => (manifest ? manifestToTracks(manifest) : []), [manifest]);
   const selected = playlists.find((p) => p.id === selectedId) ?? null;
@@ -647,7 +723,7 @@ function CloudPlaylistsPane() {
             <Plus className="h-4 w-4" />
           </button>
         </form>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <ScrollFade className="min-h-0 flex-1 overflow-y-auto">
           {playlists.map((pl) => (
             <div
               key={pl.id}
@@ -670,9 +746,12 @@ function CloudPlaylistsPane() {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  plRemove(pl.id);
-                  if (selectedId === pl.id) setSelectedId(null);
-                  toast(`Deleted ${pl.name}`, "info", "削除済み");
+                  void (async () => {
+                    if (!(await confirm({ title: `DELETE ${pl.name}?`, danger: true }))) return;
+                    plRemove(pl.id);
+                    if (selectedId === pl.id) setSelectedId(null);
+                    toast(`Deleted ${pl.name}`, "info", "削除済み");
+                  })();
                 }}
                 className="p-1 text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent"
                 aria-label={`Delete ${pl.name}`}
@@ -687,7 +766,7 @@ function CloudPlaylistsPane() {
               <span style={{ color: "var(--ato-accent)" }}>Add to cloud playlist</span>.
             </p>
           )}
-        </div>
+        </ScrollFade>
       </div>
 
       {/* detail column */}
@@ -732,7 +811,7 @@ function CloudPlaylistsPane() {
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center text-sm text-dim">
-            Select a cloud playlist — クラウドプレイリストを選択
+            Select a cloud playlist · クラウドプレイリストを選択
           </div>
         )}
       </div>
@@ -740,8 +819,8 @@ function CloudPlaylistsPane() {
   );
 }
 
-/** LOCAL scope — Dexie-backed playlists (existing behavior). */
-/** Rule-based playlists that track the library live — tag + year + plays. */
+/** LOCAL scope: Dexie-backed playlists (existing behavior). */
+/** Rule-based playlists that track the library live: tag + year + plays. */
 function SmartPlaylistsSection() {
   const rules = useSmartPlaylists();
   const tracks = useAllTracks();
@@ -761,7 +840,7 @@ function SmartPlaylistsSection() {
         className="clip-tag font-mono mb-4 flex w-fit items-center gap-2 px-3 py-1.5 text-[9px] font-bold tracking-[0.25em] text-dim hover:text-accent"
         style={{ background: "color-mix(in srgb, var(--ato-accent-2) 10%, transparent)", color: "var(--ato-accent-2)" }}
       >
-        <Zap className="h-3 w-3" /> NEW SMART PLAYLIST — RULES THAT TRACK THE LIBRARY
+        <Zap className="h-3 w-3" /> NEW SMART PLAYLIST: RULES THAT TRACK THE LIBRARY
       </button>
     );
   }
@@ -893,7 +972,7 @@ function SmartPlaylistsSection() {
             <div key={r.id} className="clip-notch mt-3 p-3" style={{ border: "1px solid var(--ato-border)", borderRadius: "var(--ato-radius)" }}>
               <div className="mb-2 flex items-center justify-between">
                 <span className="font-mono text-[9px] tracking-[0.25em] text-dim">
-                  {matched.length} MATCHING TRACKS — UPDATES WITH THE LIBRARY
+                  {matched.length} MATCHING TRACKS: UPDATES WITH THE LIBRARY
                 </span>
                 {matched.length > 0 && (
                   <button
@@ -905,11 +984,11 @@ function SmartPlaylistsSection() {
                   </button>
                 )}
               </div>
-              <div className="max-h-72 overflow-y-auto">
+              <ScrollFade className="max-h-72 overflow-y-auto">
                 {matched.map((t, i) => (
                   <TrackRow key={t.id} track={t} index={i} context={matched} showAlbum />
                 ))}
-              </div>
+              </ScrollFade>
             </div>
           );
         })}
@@ -917,22 +996,55 @@ function SmartPlaylistsSection() {
   );
 }
 
+const LIKED_ID = -1; // pseudo-playlist id for the Liked Songs view
+
 function LocalPlaylistsPane() {
   const playlists = usePlaylists();
   const tracks = useAllTracks();
   const playQueue = usePlayback((s) => s.playQueue);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | string | null>(null);
+  const playlistFocus = useUi((s) => s.playlistFocus);
+  const likedFocus = useUi((s) => s.likedFocus);
+  const savedCatalogueFocus = useUi((s) => s.savedCatalogueFocus);
+  const savedCatIds = useUi((s) => s.savedCataloguePls);
+  const catPlaylists = useCataloguePlaylists((s) => s.playlists);
+  const likedKeys = useFavorites((s) => s.keys);
+  // the left rail can summon a playlist from any view (PINNED section)
+  useEffect(() => {
+    if (playlistFocus) setSelectedId(playlistFocus.id);
+  }, [playlistFocus]);
+  useEffect(() => {
+    if (likedFocus) setSelectedId(LIKED_ID);
+  }, [likedFocus]);
+  useEffect(() => {
+    if (savedCatalogueFocus) setSelectedId(`cat-${savedCatalogueFocus.id}`);
+  }, [savedCatalogueFocus]);
+  const liked = useMemo(() => tracks.filter((t) => likedKeys.includes(t.path)), [tracks, likedKeys]);
+  const savedCat = useMemo(
+    () => catPlaylists.filter((p) => savedCatIds.includes(p.id)).map((p) => ({ ...p, key: `cat-${p.id}` })),
+    [catPlaylists, savedCatIds],
+  );
+  const savedCatSelected = useMemo(
+    () => savedCat.find((p) => p.key === selectedId) ?? null,
+    [savedCat, selectedId],
+  );
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
 
   const selected = playlists.find((p) => p.id === selectedId) ?? null;
+  const likedSelected = selectedId === LIKED_ID;
   const resolved = useMemo(() => {
+    if (likedSelected) return liked;
+    if (savedCatSelected) {
+      const byPath = new Map(tracks.map((t) => [t.path, t]));
+      return savedCatSelected.trackKeys.map((k) => byPath.get(k)).filter((t): t is NonNullable<typeof t> => !!t);
+    }
     if (!selected) return [];
     const byId = new Map(tracks.map((t) => [t.id, t]));
     return selected.trackIds.map((id) => byId.get(id)).filter((t): t is NonNullable<typeof t> => !!t);
-  }, [selected, tracks]);
+  }, [likedSelected, liked, savedCatSelected, selected, tracks]);
 
   const totalSec = resolved.reduce((s, t) => s + (t.duration || 0), 0);
   const fmt = (s: number) => `${Math.floor(s / 60)} min`;
@@ -944,44 +1056,100 @@ function LocalPlaylistsPane() {
       {/* list column */}
       <div className="flex w-full max-h-56 shrink-0 flex-col md:max-h-none md:w-64">
         <button
-          onClick={() => {
-            setCreating(true);
-            setNewName("");
-          }}
+          onClick={() => useUi.getState().setPlaylistCreate({ onCreated: (id) => setSelectedId(id) })}
           className="clip-tag font-mono mb-3 flex items-center gap-2 self-start px-4 py-2 text-[10px] font-bold tracking-[0.25em]"
           style={{ background: "var(--ato-accent)", color: "var(--ato-bg)" }}
         >
           <Plus className="h-3.5 w-3.5" /> NEW PLAYLIST
         </button>
-        {creating && (
-          <form
-            className="mb-3 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void createPlaylist(newName || "New Playlist").then((id) => {
-                setSelectedId(id);
-                setCreating(false);
-                toast("Playlist created", "success", "プレイリストを作成");
-              });
+        <ScrollFade className="min-h-0 flex-1 overflow-y-auto">
+          {/* Liked Songs: always first, styled exactly like the rows below */}
+          <button
+            onClick={() => {
+              setSelectedId(LIKED_ID);
+              setEditing(false);
+            }}
+            className={`group clip-slash-both mb-1 flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left`}
+            style={{
+              background: likedSelected
+                ? "color-mix(in srgb, var(--ato-accent) 12%, transparent)"
+                : "color-mix(in srgb, var(--ato-text) 4%, transparent)",
+              borderLeft: likedSelected ? "3px solid var(--ato-accent)" : "3px solid transparent",
             }}
           >
-            <input
-              autoFocus
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Name…"
-              className="font-mono min-w-0 flex-1 bg-transparent px-3 py-2 text-[11px] outline-none"
-              style={{ border: "1px solid var(--ato-border)" }}
-            />
-            <button type="submit" className="px-2 text-accent" aria-label="Create">
-              <Plus className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => setCreating(false)} className="px-1 text-dim" aria-label="Cancel">
-              <X className="h-4 w-4" />
-            </button>
-          </form>
-        )}
-        <div className="min-h-0 flex-1 overflow-y-auto">
+            <span className="relative shrink-0">
+              <span
+                className="flex h-10 w-10 items-center justify-center"
+                style={{
+                  borderRadius: "var(--ato-radius)",
+                  background: "linear-gradient(135deg, var(--ato-accent), var(--ato-accent-2))",
+                }}
+              >
+                <Heart className="h-4 w-4" fill="var(--ato-bg)" style={{ color: "var(--ato-bg)" }} />
+              </span>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span
+                className="block truncate text-[13px] font-semibold"
+                style={{ color: likedSelected ? "var(--ato-accent)" : "var(--ato-text-dim)" }}
+              >
+                Liked Songs
+              </span>
+              <span className="font-mono block text-[9px] tracking-[0.2em] text-dim">{liked.length} TRACKS</span>
+            </span>
+          </button>
+          {savedCat.map((p) => (
+            <div
+              key={p.key}
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                setSelectedId(p.key);
+                setEditing(false);
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                showContextMenu(e, [
+                  {
+                    label: "Remove from your library",
+                    jp: "ライブラリから削除",
+                    run: () => {
+                      useUi.getState().toggleSavedCatalogue(p.id);
+                      if (selectedId === p.key) setSelectedId(null);
+                      toast(`Removed ${p.name} from your library`, "info", "削除済み");
+                    },
+                  },
+                ]);
+              }}
+              className={`group clip-slash-both mb-1 flex cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left`}
+              style={{
+                background: selectedId === p.key
+                  ? "color-mix(in srgb, var(--ato-accent) 12%, transparent)"
+                  : "color-mix(in srgb, var(--ato-text) 4%, transparent)",
+                borderLeft: selectedId === p.key ? "3px solid var(--ato-accent)" : "3px solid transparent",
+              }}
+            >
+              <span className="shrink-0">
+                <CataloguePlaylistCover
+                  tracks={tracks.filter((t) => p.trackKeys.includes(t.path)).slice(0, 16)}
+                  title={p.name}
+                  picKey={p.picKey}
+                  className="h-10 w-10"
+                />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span
+                  className="block truncate text-[13px] font-semibold"
+                  style={{ color: selectedId === p.key ? "var(--ato-accent)" : "var(--ato-text-dim)" }}
+                >
+                  {p.name}
+                </span>
+                <span className="font-mono block text-[9px] tracking-[0.2em] text-dim">
+                  {p.trackKeys.length} TRACKS · <span style={{ color: "var(--ato-gold)" }}>CTL</span>
+                </span>
+              </span>
+            </div>
+          ))}
           {playlists.map((pl) => (
             <PlaylistListRow
               key={pl.id}
@@ -991,11 +1159,19 @@ function LocalPlaylistsPane() {
                 setSelectedId(pl.id!);
                 setEditing(false);
               }}
+              onRename={() => {
+                setSelectedId(pl.id!);
+                setEditing(true);
+                setEditName(pl.name);
+              }}
               onDelete={() => {
-                void deletePlaylist(pl.id!).then(() => {
-                  if (selectedId === pl.id) setSelectedId(null);
-                  toast(`Deleted ${pl.name}`, "info", "削除済み");
-                });
+                void (async () => {
+                  if (!(await confirm({ title: `DELETE ${pl.name}?`, danger: true }))) return;
+                  void deletePlaylist(pl.id!).then(() => {
+                    if (selectedId === pl.id) setSelectedId(null);
+                    toast(`Deleted ${pl.name}`, "info", "削除済み");
+                  });
+                })();
               }}
             />
           ))}
@@ -1005,12 +1181,108 @@ function LocalPlaylistsPane() {
               or create one here.
             </p>
           )}
-        </div>
+        </ScrollFade>
       </div>
 
       {/* detail column */}
       <div className="flex min-w-0 flex-1 flex-col" style={{ borderLeft: "1px solid var(--ato-border)" }}>
-        {selected ? (
+        {savedCatSelected ? (
+          <>
+            <div className="flex items-start justify-between gap-4 px-1 pb-4">
+              <div className="flex min-w-0 items-center gap-4">
+                <CataloguePlaylistCover
+                  tracks={resolved}
+                  title={savedCatSelected.name}
+                  picKey={savedCatSelected.picKey}
+                  className="h-20 w-20"
+                />
+                <div className="min-w-0">
+                  <h2 className="font-display truncate text-2xl font-bold">{savedCatSelected.name}</h2>
+                  <p className="font-mono mt-1 text-[10px] tracking-[0.25em] text-dim">
+                    {resolved.length} TRACKS {totalSec > 0 ? `· ${fmt(totalSec)}` : ""} //{" "}
+                    <span style={{ color: "var(--ato-gold)" }}>CATALOGUE · SHARED</span> // CURATED BY THE SERVER
+                  </p>
+                </div>
+              </div>
+              {resolved.length > 0 && (
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() => {
+                      fx.impact(1);
+                      playQueue(resolved, 0);
+                    }}
+                    className="clip-slash-both font-display flex items-center gap-2 px-5 py-2 text-[11px] font-bold tracking-[0.25em]"
+                    style={{ background: "var(--ato-accent)", color: "var(--ato-bg)" }}
+                  >
+                    <Play className="h-3.5 w-3.5" /> PLAY
+                  </button>
+                  <button
+                    onClick={() => playQueue(resolved, Math.floor(Math.random() * resolved.length))}
+                    className="clip-slash-both font-display flex items-center gap-2 px-4 py-2 text-[11px] font-bold tracking-[0.25em]"
+                    style={{
+                      background: "color-mix(in srgb, var(--ato-accent-2) 16%, transparent)",
+                      color: "var(--ato-accent-2)",
+                    }}
+                  >
+                    <Shuffle className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+            {resolved.length > 0 ? (
+              <VirtualTrackList tracks={resolved} className="min-h-0 flex-1 pb-6" />
+            ) : (
+              <p className="font-mono px-1 py-10 text-[11px] leading-relaxed tracking-[0.1em] text-dim">
+                THE SERVER'S CURATOR HASN'T FILED ANY TRACKS YET.
+              </p>
+            )}
+          </>
+        ) : likedSelected ? (
+          <>
+            <div className="flex items-start justify-between gap-4 px-1 pb-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <Heart className="h-5 w-5 shrink-0" fill="var(--ato-accent)" style={{ color: "var(--ato-accent)" }} />
+                <div className="min-w-0">
+                  <h2 className="font-display truncate text-2xl font-bold">Liked Songs</h2>
+                  <p className="font-mono mt-1 text-[10px] tracking-[0.25em] text-dim">
+                    {liked.length} TRACKS {totalSec > 0 ? `· ${fmt(totalSec)}` : ""} // お気に入り
+                  </p>
+                </div>
+              </div>
+              {liked.length > 0 && (
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    onClick={() => {
+                      fx.impact(1);
+                      playQueue(liked, 0);
+                    }}
+                    className="clip-slash-both font-display flex items-center gap-2 px-5 py-2 text-[11px] font-bold tracking-[0.25em]"
+                    style={{ background: "var(--ato-accent)", color: "var(--ato-bg)" }}
+                  >
+                    <Play className="h-3.5 w-3.5" /> PLAY
+                  </button>
+                  <button
+                    onClick={() => playQueue(liked, Math.floor(Math.random() * liked.length))}
+                    className="clip-slash-both font-display flex items-center gap-2 px-4 py-2 text-[11px] font-bold tracking-[0.25em]"
+                    style={{
+                      background: "color-mix(in srgb, var(--ato-accent-2) 16%, transparent)",
+                      color: "var(--ato-accent-2)",
+                    }}
+                  >
+                    <Shuffle className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+            {liked.length > 0 ? (
+              <VirtualTrackList tracks={liked} className="min-h-0 flex-1 pb-6" />
+            ) : (
+              <p className="font-mono px-1 py-10 text-[11px] leading-relaxed tracking-[0.1em] text-dim">
+                NOTHING LIKED YET // TAP THE HEART ON ANY TRACK
+              </p>
+            )}
+          </>
+        ) : selected ? (
           <>
             <div className="flex items-start justify-between gap-4 px-1 pb-4">
               <div className="min-w-0">
@@ -1071,6 +1343,39 @@ function LocalPlaylistsPane() {
                   >
                     <Shuffle className="h-3.5 w-3.5" />
                   </button>
+                  {cloudConfigured() && (
+                    <button
+                      onClick={() => {
+                        toast(`Uploading ${resolved.length} tracks…`, "info", "アップロード");
+                        void (async () => {
+                          try {
+                            const r = await uploadTracks(resolved, resolveSourceFile, undefined, async (k) => (await db.covers.get(k))?.blob ?? null);
+                            // mirror it as a cloud playlist with the same name
+                            const cloudPls = useCloudPlaylists.getState().playlists;
+                            const mirror = cloudPls.find((p) => p.name === selected.name) ?? useCloudPlaylists.getState().create(selected.name);
+                            if (mirror) for (const t of resolved) useCloudPlaylists.getState().addTrack(mirror.id, t.path);
+                            await useCloud.getState().refresh();
+                            toast(
+                              r.failed
+                                ? `Uploaded with ${r.failed} failures`
+                                : r.manifestWritten
+                                  ? `Uploaded "${selected.name}" to the cloud`
+                                  : `Uploaded "${selected.name}", cloud list unreachable: retry later`,
+                              r.failed || !r.manifestWritten ? "error" : "success",
+                              "クラウド",
+                            );
+                          } catch {
+                            toast("Upload failed", "error", "アップロード失敗");
+                          }
+                        })();
+                      }}
+                      className="clip-slash-both font-display flex items-center gap-2 px-4 py-2 text-[11px] font-bold tracking-[0.25em]"
+                      style={{ background: "color-mix(in srgb, var(--ato-text) 6%, transparent)", color: "var(--ato-text-dim)" }}
+                      title="Upload every track in this playlist and mirror it to your cloud playlists"
+                    >
+                      <Download className="h-3.5 w-3.5 rotate-180" /> UPLOAD
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1086,13 +1391,13 @@ function LocalPlaylistsPane() {
               />
             ) : (
               <p className="py-10 text-center text-[12px] text-dim">
-                Empty — right-click tracks anywhere to add them.
+                Empty: right-click tracks anywhere to add them.
               </p>
             )}
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center">
-            <p className="text-sm text-dim">Select a playlist — プレイリストを選択</p>
+            <p className="text-sm text-dim">Select a playlist · プレイリストを選択</p>
           </div>
         )}
       </div>
@@ -1105,17 +1410,24 @@ function PlaylistListRow({
   playlist,
   active,
   onSelect,
+  onRename,
   onDelete,
 }: {
   playlist: Playlist;
   active: boolean;
   onSelect: () => void;
+  onRename: () => void;
   onDelete: () => void;
 }) {
+  const picInput = useRef<HTMLInputElement>(null);
+  const [pendingPic, setPendingPic] = useState<File | null>(null);
+  const pinned = useUi((s) => s.pinnedPlaylists.includes(playlist.id!));
+  const openMenu = (e: ReactMouseEvent) => showPlaylistMenu(e, playlist, { onRename, onDelete });
   return (
     <div
       onClick={onSelect}
       onKeyDown={(e) => e.key === "Enter" && onSelect()}
+      onContextMenu={openMenu}
       role="button"
       tabIndex={0}
       className="group clip-slash-both mb-1 flex cursor-pointer items-center justify-between gap-3 px-4 py-3"
@@ -1124,11 +1436,60 @@ function PlaylistListRow({
         borderLeft: active ? "3px solid var(--ato-accent)" : "3px solid transparent",
       }}
     >
-      <PlaylistCover trackIds={playlist.trackIds} title={playlist.name} className="h-10 w-10" />
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          picInput.current?.click();
+        }}
+        className="relative shrink-0"
+        title="Change picture"
+        aria-label={`Change picture for ${playlist.name}`}
+      >
+        <PlaylistCover trackIds={playlist.trackIds} title={playlist.name} pic={playlist.pic} className="h-10 w-10" />
+        <span
+          className="absolute inset-0 hidden items-center justify-center group-hover:flex"
+          style={{ background: "rgba(0,0,0,.45)", borderRadius: "var(--ato-radius)" }}
+        >
+          <ImageIcon className="h-3.5 w-3.5 text-white" />
+        </span>
+      </button>
+      <input
+        ref={picInput}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f?.type.startsWith("image/")) setPendingPic(f);
+          e.target.value = "";
+        }}
+      />
+      {pendingPic && (
+        <PictureCropper
+          file={pendingPic}
+          title="PLAYLIST PICTURE"
+          onCancel={() => setPendingPic(null)}
+          onConfirm={(blob) => {
+            setPendingPic(null);
+            void db.playlists.update(playlist.id!, { pic: blob }).then(() => toast("Playlist picture updated", "success", "カバー更新"));
+          }}
+        />
+      )}
       <div className="min-w-0 flex-1">
         <div className="truncate text-[13px] font-semibold">{playlist.name}</div>
         <div className="font-mono text-[9px] tracking-[0.2em] text-dim">{playlist.trackIds.length} TRACKS</div>
       </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          useUi.getState().togglePinnedPlaylist(playlist.id!);
+        }}
+        className={`p-1 transition-opacity ${pinned ? "text-accent" : "text-dim opacity-0 group-hover:opacity-100 hover:text-accent"}`}
+        title={pinned ? "Unpin from sidebar" : "Pin to sidebar"}
+        aria-label={pinned ? `Unpin ${playlist.name}` : `Pin ${playlist.name}`}
+      >
+        <Pin className="h-3.5 w-3.5" fill={pinned ? "currentColor" : "none"} />
+      </button>
       <button
         onClick={(e) => {
           e.stopPropagation();

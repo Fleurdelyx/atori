@@ -1,6 +1,6 @@
 import type { ShaderPack } from "@/skins/types";
 
-/** Vertex shader — fullscreen clip-space quad. */
+/** Vertex shader: fullscreen clip-space quad. */
 export const VERT = /* glsl */ `
 varying vec2 vUv;
 void main() {

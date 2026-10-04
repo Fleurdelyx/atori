@@ -4,7 +4,7 @@ import { db, type SmartPlaylist } from "./db";
 import { splitGenres, type TrackMeta } from "./types";
 
 /** CRUD over rule-based playlists. Matching is derived at read time, so they
- *  stay current with the library automatically — that's the point of them. */
+ *  stay current with the library automatically: that's the point of them. */
 
 export async function createSmartPlaylist(rule: Omit<SmartPlaylist, "createdAt">): Promise<number> {
   const id = await db.smartPlaylists.add({ ...rule, name: rule.name.trim() || "Smart Playlist", createdAt: Date.now() });
@@ -19,7 +19,7 @@ export function deleteSmartPlaylist(id: number) {
   return db.smartPlaylists.delete(id);
 }
 
-/** Tracks matching a rule — tag (any overlap), year range, minimum plays. */
+/** Tracks matching a rule: tag (any overlap), year range, minimum plays. */
 export function matchSmartPlaylist(rule: SmartPlaylist, tracks: TrackMeta[]): TrackMeta[] {
   const minYear = rule.minYear ?? -Infinity;
   const maxYear = rule.maxYear ?? Infinity;

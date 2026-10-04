@@ -3,7 +3,7 @@ import type { TrackMeta } from "./types";
 
 /** Stored file access: FS Access handle when available, else the File itself. */
 export interface TrackSource {
-  path: string; // pk — mirrors TrackMeta.path
+  path: string; // pk: mirrors TrackMeta.path
   handle?: FileSystemFileHandle;
   file?: File;
 }
@@ -18,9 +18,11 @@ export interface Playlist {
   name: string;
   trackIds: number[];
   createdAt: number;
+  /** optional user-chosen cover image (fallback: track-cover collage) */
+  pic?: Blob;
 }
 
-/** One "this track was played" event — powers Recently Played + Wrapped. */
+/** One "this track was played" event: powers Recently Played + Wrapped. */
 export interface PlayEvent {
   id?: number;
   trackId: number;
@@ -38,7 +40,7 @@ export interface SmartPlaylist {
   createdAt: number;
 }
 
-/** A clip/gif attached to a track — plays beside the audio (canvas-style). */
+/** A clip/gif attached to a track: plays beside the audio (canvas-style). */
 export interface TrackVisual {
   trackId: number; // pk
   blob: Blob;

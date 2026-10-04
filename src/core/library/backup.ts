@@ -2,7 +2,7 @@ import { db, type Playlist } from "./db";
 import type { TrackMeta } from "./types";
 
 /**
- * Catalog backup — every track's metadata + local playlists + saved cloud
+ * Catalog backup: every track's metadata + local playlists + saved cloud
  * keys as one JSON file. Audio blobs/handles are NOT included: cloud tracks
  * re-stream from the worker, local tracks re-link when their folder is
  * re-imported (same path ⇒ same hash id ⇒ metadata re-attaches).

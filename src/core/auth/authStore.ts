@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 /**
- * AuthStore — account session for the atori-cloud worker (accounts mode).
+ * AuthStore: account session for the atori-cloud worker (accounts mode).
  * serverUrl + sessionToken + user persist in localStorage ("atori-auth"),
  * the same tradeoff the legacy shared token had. sessionExpired/authOpen
  * are runtime-only flags.
@@ -12,13 +12,17 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
+  /** true when the account may manage the server's shared catalogue */
+  isAdmin?: boolean;
+  /** epoch ms the account was created on the worker */
+  createdAt?: number;
 }
 
 interface AuthState {
   serverUrl: string;
   sessionToken: string | null;
   user: AuthUser | null;
-  /** set when the worker rejects the stored session (401) — prompts re-login */
+  /** set when the worker rejects the stored session (401): prompts re-login */
   sessionExpired: boolean;
   /** AuthScreen visibility */
   authOpen: boolean;

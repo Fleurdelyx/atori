@@ -6,7 +6,7 @@ import { toast } from "@/state/toastStore";
 /**
  * Auto-updater (desktop shell only). One passive check per launch; when an
  * update exists it downloads and installs immediately, then relaunches.
- * Failures are silent — the app keeps working on whatever version it has.
+ * Failures are silent: the app keeps working on whatever version it has.
  */
 
 let checked = false;

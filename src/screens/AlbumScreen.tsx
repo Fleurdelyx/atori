@@ -4,6 +4,7 @@ import { useAlbums } from "@/core/library/useLibrary";
 import { usePlayback } from "@/core/audio/playbackStore";
 import { useUi } from "@/state/uiStore";
 import { useCloud } from "@/core/cloud/cloudStore";
+import { useCatalogue } from "@/core/cloud/catalogueStore";
 import { manifestToTracks } from "@/core/cloud/cloudService";
 import { groupAlbums } from "@/core/library/useLibrary";
 import { fx } from "@/fx/FxDirector";
@@ -22,17 +23,20 @@ export function AlbumScreen() {
 
   const localAlbums = useAlbums();
   const { manifest } = useCloud();
+  const catalogueManifest = useCatalogue((s) => s.manifest);
   const albums = useMemo(() => {
-    if (albumSource !== "cloud") return localAlbums;
-    return manifest ? groupAlbums(manifestToTracks(manifest)) : [];
-  }, [albumSource, localAlbums, manifest]);
+    if (albumSource === "cloud") return manifest ? groupAlbums(manifestToTracks(manifest)) : [];
+    if (albumSource === "catalogue") return catalogueManifest ? groupAlbums(manifestToTracks(catalogueManifest)) : [];
+    return localAlbums;
+  }, [albumSource, localAlbums, manifest, catalogueManifest]);
 
   const album = useMemo(() => albums.find((a) => a.key === albumKey), [albums, albumKey]);
+  const backView = albumSource === "local" ? "library" : albumSource === "catalogue" ? "catalogue" : "cloud";
 
   if (!album) {
     return (
       <div className="p-10">
-        <button onClick={() => navigate(albumSource === "cloud" ? "cloud" : "library")} className="text-sm text-dim hover:text-accent">
+        <button onClick={() => navigate(backView)} className="text-sm text-dim hover:text-accent">
           ← Back
         </button>
       </div>
@@ -53,18 +57,25 @@ export function AlbumScreen() {
               "linear-gradient(180deg, color-mix(in srgb, var(--ato-accent) 10%, transparent), transparent 70%)",
           }}
         />
-        <div className="relative flex flex-col items-center gap-7 px-10 pt-10 md:flex-row">
+        <div className="relative flex flex-col items-center gap-7 px-10 pt-16 md:flex-row md:items-start md:gap-10">
           <button
-            onClick={() => navigate(albumSource === "cloud" ? "cloud" : "library")}
-            className="clip-tag font-mono absolute top-5 left-6 px-3 py-1.5 text-[10px] tracking-[0.25em] text-dim hover:text-accent"
+            onClick={() => navigate(backView)}
+            className="clip-tag font-mono absolute top-6 left-10 flex items-center gap-2 px-4 py-2 text-[11px] tracking-[0.3em] backdrop-blur-md transition-colors"
+            style={{
+              color: "var(--ato-text-dim)",
+              background: "color-mix(in srgb, var(--ato-panel) 70%, transparent)",
+              border: "1px solid var(--ato-border)",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--ato-accent)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--ato-text-dim)")}
           >
-            <ArrowLeft className="inline h-3 w-3" /> BACK
+            <ArrowLeft className="h-3.5 w-3.5" /> BACK
           </button>
           <HoloCover
             coverKey={album.coverKey}
             title={album.name}
             grade={album.grade}
-            className="h-52 w-52 shadow-2xl"
+            className="mt-6 h-52 w-52 shadow-2xl md:mt-10"
           />
           <div className="min-w-0">
             <div className="font-mono flex items-center gap-3 text-[10px] tracking-[0.3em] text-dim">
@@ -75,7 +86,7 @@ export function AlbumScreen() {
             <h1 className="font-display mt-2 text-4xl leading-tight font-bold">{album.name}</h1>
             <p className="mt-2 text-sm text-dim">
               {album.artist}
-              {album.year ? ` — ${album.year}` : ""} · {album.tracks.length} tracks ·{" "}
+              {album.year ? ` · ${album.year}` : ""} · {album.tracks.length} tracks ·{" "}
               {formatTime(totalSec)}
             </p>
             <div className="mt-6 flex gap-3">

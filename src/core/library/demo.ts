@@ -2,7 +2,7 @@ import { importFromFileList } from "./importService";
 import { db } from "./db";
 
 /**
- * DEV fixture — `?demo=1` fetches public/demo-library/ and pushes it
+ * DEV fixture: `?demo=1` fetches public/demo-library/ and pushes it
  * through the real import pipeline (worker parse → Dexie → covers),
  * so import→library→playback can be exercised without native dialogs.
  */

@@ -2,8 +2,8 @@ import { liveQuery } from "dexie";
 import { useEffect, useState } from "react";
 import { db, type Playlist } from "./db";
 
-export async function createPlaylist(name: string): Promise<number> {
-  const id = await db.playlists.add({ name: name.trim() || "New Playlist", trackIds: [], createdAt: Date.now() });
+export async function createPlaylist(name: string, pic?: Blob): Promise<number> {
+  const id = await db.playlists.add({ name: name.trim() || "New Playlist", trackIds: [], createdAt: Date.now(), pic });
   return id as number;
 }
 

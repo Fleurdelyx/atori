@@ -1,7 +1,7 @@
 import type { SkinDef } from "./types";
 
 /**
- * PASTEL DREAMY OVA — 90s city-pop mood.
+ * PASTEL DREAMY OVA: 90s city-pop mood.
  * Cream base, peach/lavender/mint, drifting bokeh, film grain,
  * slow dreamy motion.
  */

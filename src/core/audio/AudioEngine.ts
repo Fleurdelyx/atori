@@ -23,7 +23,7 @@ const FADE_MS = 500;
 const DEFAULT_CROSSFADE_MS = 1200;
 
 /**
- * AudioEngine — the transport. Web Audio graph:
+ * AudioEngine: the transport. Web Audio graph:
  *   <audio A/B> → srcGainA/B → EQ chain (10 biquads) → analyser → masterGain → out
  * Two media elements so crossfade can overlap tracks; `el` always points at the
  * active one and every UI read follows it. Per-element source gains let the two
@@ -32,7 +32,7 @@ const DEFAULT_CROSSFADE_MS = 1200;
  * policy. All UI reads flow through onPatch subscribers.
  */
 class AudioEngine {
-  /** Raw media element — exposed for rAF-driven UI (seek bars, progress). */
+  /** Raw media element: exposed for rAF-driven UI (seek bars, progress). */
   el: HTMLAudioElement;
   private elA: HTMLAudioElement;
   private elB: HTMLAudioElement;
@@ -52,20 +52,23 @@ class AudioEngine {
   /** a restored track is displayed but its audio isn't loaded until the next play */
   private pendingLoad = false;
   private pendingSeek: number | null = null;
+  /** Detaches a pending loadedmetadata seek when its element is recycled. */
+  private metaSeekCleanup: (() => void) | null = null;
   private userVolume = 0.9;
   fadeEnabled = true;
   crossfadeEnabled = false;
-  /** crossfade length in ms — 0 disables (set via setCrossfadeSeconds) */
+  /** crossfade length in ms: 0 disables (set via setCrossfadeSeconds) */
   crossfadeMs = DEFAULT_CROSSFADE_MS;
   /** when the queue runs dry, append similar tracks and keep playing */
   autoplayEnabled = true;
-  /** smart volume — learn per-track loudness and level playback */
+  /** smart volume: learn per-track loudness and level playback */
   smartVolumeEnabled = false;
   /** a loudness measurement is in flight for this track */
   private measuringFor: TrackMeta | null = null;
-  /** a crossfade is rolling — suppress further transitions until it settles */
+  /** bumped by resetSmartVolumeLearn: aborts a measurement already in flight */
+  private learnEpoch = 0;
+  /** a crossfade is rolling: suppress further transitions until it settles */
   private transitioning = false;
-  private fadeTimer: number | null = null;
   private endFading = false;
 
   queue: TrackMeta[] = [];
@@ -88,8 +91,7 @@ class AudioEngine {
     this.elA = AudioEngine.makeElement();
     this.elB = AudioEngine.makeElement();
     this.el = this.elA;
-    this.elA.volume = this.userVolume;
-    this.elB.volume = this.userVolume;
+    this.setVolume(0.9);
     this.bindElementEvents(this.elA);
     this.bindElementEvents(this.elB);
   }
@@ -98,12 +100,12 @@ class AudioEngine {
     const el = new Audio();
     el.preload = "auto";
     // required for cloud streams: keeps the MediaElementSource untainted
-    // (server must answer with Access-Control-Allow-Origin — the worker does)
+    // (server must answer with Access-Control-Allow-Origin: the worker does)
     el.crossOrigin = "anonymous";
     return el;
   }
 
-  /** Only the active element drives engine state — the idle one is fading in/out. */
+  /** Only the active element drives engine state: the idle one is fading in/out. */
   private bindElementEvents(el: HTMLAudioElement) {
     const active = () => el === this.el;
     el.addEventListener("timeupdate", () => {
@@ -127,7 +129,8 @@ class AudioEngine {
     });
     el.addEventListener("error", () => {
       if (!active()) return;
-      // cloud tracks may fail on auth — let the cloud layer check the session
+      if (!el.src) return; // deliberately emptied (skip transition): not a failure
+      // cloud tracks may fail on auth: let the cloud layer check the session
       if (this.current?.source === "cloud") this.onCloudStreamError?.();
       // bad file → skip forward so the queue doesn't stall
       if (this.index >= 0) this.next(true);
@@ -149,18 +152,36 @@ class AudioEngine {
     return this.shuffleOrder[i];
   }
 
+  /** The current track's index as the UI/store/persistence see it: a queue index. */
+  private emitIndex(): number {
+    return this.shuffle ? this.orderIndexToQueue(this.index) : this.index;
+  }
+
   private buildShuffleOrder() {
     this.shuffleOrder = this.queue.map((_, i) => i);
     for (let i = this.shuffleOrder.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * this.shuffleOrder.length);
       [this.shuffleOrder[i], this.shuffleOrder[j]] = [this.shuffleOrder[j], this.shuffleOrder[i]];
     }
-    // keep the initially-picked track first when we shuffle from a selection
+    // keep the initially-picked track first when we shuffle from a selection.
+    // `this.index` arrives as a queue index here; after the pin it is a
+    // play-order position (first), so rebase it: the two meanings diverge.
     const wanted = this.index;
     const at = this.shuffleOrder.indexOf(wanted);
     if (at > 0) {
       this.shuffleOrder.splice(at, 1);
       this.shuffleOrder.unshift(wanted);
+    }
+    this.index = 0;
+  }
+
+  /** Re-pin shuffle order so the given queue index plays first. */
+  private pinCurrentInShuffle(curQueueIdx: number) {
+    this.shuffleOrder = this.queue.map((_, i) => i);
+    const at = this.shuffleOrder.indexOf(curQueueIdx);
+    if (at > 0) {
+      this.shuffleOrder.splice(at, 1);
+      this.shuffleOrder.unshift(curQueueIdx);
     }
   }
 
@@ -251,16 +272,19 @@ class AudioEngine {
 
   setSmartVolume(on: boolean) {
     this.smartVolumeEnabled = on;
-    if (!on) {
-      // drop any learned correction on the live source immediately
-      const g = this.srcGainFor(this.el);
-      if (g && this.ctx && !this.transitioning) {
-        const t = this.ctx.currentTime;
-        g.gain.cancelScheduledValues(t);
-        g.gain.setValueAtTime(g.gain.value, t);
-        g.gain.linearRampToValueAtTime(1, t + 0.4);
-      }
+    // the live source reacts immediately, not just at the next transition
+    const g = this.srcGainFor(this.el);
+    if (g && this.ctx && !this.transitioning) {
+      const t = this.ctx.currentTime;
+      g.gain.cancelScheduledValues(t);
+      g.gain.setValueAtTime(g.gain.value, t);
+      g.gain.linearRampToValueAtTime(on ? this.gainBase(this.current) : 1, t + 0.4);
     }
+  }
+
+  /** a loudness sample is being taken for the current track right now */
+  get learningVolume(): boolean {
+    return this.measuringFor != null;
   }
 
   /** Per-track loudness factor (smart volume), 1 when off/unlearned. */
@@ -270,6 +294,10 @@ class AudioEngine {
   }
 
   private async resolveAndLoad(track: TrackMeta, el: HTMLAudioElement = this.el, preload = false): Promise<boolean> {
+    // the element is about to be repurposed: a resume-seek listener from the
+    // previous track must not fire on the new one
+    this.metaSeekCleanup?.();
+    this.metaSeekCleanup = null;
     let url: string | null = null;
     let owned = false; // object URLs we create must be revoked later
     const file = await this.trackResolver(track.path);
@@ -321,7 +349,7 @@ class AudioEngine {
     const ok = await this.resolveAndLoad(track, el);
     if (!ok) {
       console.warn(`AudioEngine: cannot resolve ${track.path}, skipping`);
-      toast(`Cannot open ${track.title} — skipped`, "error", "再生できません");
+      toast(`Cannot open ${track.title} (skipped)`, "error", "再生できません");
       this.pendingSeek = null;
       this.skipAndContinue();
       return;
@@ -330,18 +358,20 @@ class AudioEngine {
     if (this.pendingSeek != null) {
       const pos = this.pendingSeek;
       this.pendingSeek = null;
-      // src was just set, so metadata is gone — apply the resume position once duration is known
+      // src was just set, so metadata is gone: apply the resume position once duration is known
       if (Number.isFinite(el.duration) && el.duration > 0) {
         el.currentTime = Math.min(pos, el.duration);
       } else {
         const onMeta = () => {
+          this.metaSeekCleanup = null;
           el.removeEventListener("loadedmetadata", onMeta);
           el.currentTime = Math.min(pos, el.duration || pos);
         };
         el.addEventListener("loadedmetadata", onMeta);
+        this.metaSeekCleanup = () => el.removeEventListener("loadedmetadata", onMeta);
       }
     }
-    this.emit({ queue: [...this.queue], index: this.index, duration: track.duration || 0 });
+    this.emit({ queue: [...this.queue], index: this.emitIndex(), duration: track.duration || 0 });
     this.updateMediaSession(track);
     try {
       await el.play();
@@ -351,7 +381,7 @@ class AudioEngine {
       console.warn("AudioEngine: play() rejected", e);
     }
     this.scheduleLoudnessLearn(track);
-    // keep the next track warm — on the idle element when crossfading
+    // keep the next track warm: on the idle element when crossfading
     const nextTrack = this.queue[this.orderIndexToQueue(this.index + 1)];
     if (nextTrack) {
       if (this.crossfadeEnabled && this.ctx && !this.transitioning) void this.resolveAndLoad(nextTrack, this.inactiveEl());
@@ -363,23 +393,46 @@ class AudioEngine {
   private scheduleLoudnessLearn(track: TrackMeta) {
     if (!this.smartVolumeEnabled || track.gainDb != null || this.measuringFor) return;
     this.measuringFor = track;
+    const epoch = this.learnEpoch;
     window.setTimeout(() => {
       void (async () => {
         try {
-          if (!this.smartVolumeEnabled || this.current !== track) return;
-          const rms = await audioLevels.sampleRms(3000);
-          if (rms == null || rms <= 0.0005 || this.current !== track) return;
-          const REF_RMS = 0.12; // quiet-ish reference so most corrections are gentle boosts/cuts
-          const gainDb = Math.max(-10, Math.min(10, Math.round(20 * Math.log10(REF_RMS / rms) * 10) / 10));
-          track.gainDb = Math.abs(gainDb) < 0.3 ? 0 : gainDb;
-          void import("@/core/library/db").then(({ db }) => db.tracks.update(track.id, { gainDb: track.gainDb }));
-          // apply to the live source with a gentle glide
+          if (epoch !== this.learnEpoch || !this.smartVolumeEnabled || this.current !== track) return;
+          // the analyser hears everything the engine applies below full scale
+          // (user volume × per-track gain). Divide it back out, or a track
+          // learned while listening quietly looks quiet and gets BOOSTED:
+          // loud masters must be cut, not lifted.
           const g = this.srcGainFor(this.el);
-          if (g && this.ctx && !this.transitioning) {
+          const applied = this.el.volume * (g?.gain.value ?? 1);
+          const rms = await audioLevels.sampleRms(3000);
+          if (epoch !== this.learnEpoch || !this.smartVolumeEnabled || this.current !== track) return;
+          if (rms == null || applied <= 0.001) return;
+          const loudness = rms / applied;
+          if (loudness <= 0.0005) return;
+          const REF_RMS = 0.12; // quiet-ish reference so most corrections are gentle boosts/cuts
+          // cuts reach deeper than boosts: loud modern masters need real taming,
+          // while big boosts on quiet tracks amplify noise
+          const gainDb = Math.max(-14, Math.min(10, Math.round(20 * Math.log10(REF_RMS / loudness) * 10) / 10));
+          track.gainDb = Math.abs(gainDb) < 0.3 ? 0 : gainDb;
+          void import("@/core/library/db").then(({ db }) =>
+            db.transaction("rw", db.tracks, async () => {
+              if (epoch !== this.learnEpoch) return; // reset while we were writing
+              const byId = await db.tracks.get(track.id);
+              if (byId && byId.path !== track.path) return; // hash collision: not ours
+              const updated = await db.tracks.update(track.id, { gainDb: track.gainDb });
+              if (!updated && (track.source ?? "local") === "cloud") {
+                // cloud rows aren't stored locally: shadow row, same as play stats
+                await db.tracks.put({ ...track, gainDb: track.gainDb });
+              }
+            }),
+          );
+          // apply to the live source with a gentle glide
+          const gg = this.srcGainFor(this.el);
+          if (gg && this.ctx && !this.transitioning) {
             const t = this.ctx.currentTime;
-            g.gain.cancelScheduledValues(t);
-            g.gain.setValueAtTime(g.gain.value, t);
-            g.gain.linearRampToValueAtTime(this.gainBase(track), t + 0.8);
+            gg.gain.cancelScheduledValues(t);
+            gg.gain.setValueAtTime(gg.gain.value, t);
+            gg.gain.linearRampToValueAtTime(this.gainBase(track), t + 0.8);
           }
         } finally {
           this.measuringFor = null;
@@ -388,13 +441,48 @@ class AudioEngine {
     }, 5000);
   }
 
+  /**
+   * Discard every learned loudness correction: tracks re-learn as they play.
+   * Used after the measurement math changes; old learned values may be wrong.
+   */
+  async resetSmartVolumeLearn() {
+    this.learnEpoch++;
+    this.measuringFor = null;
+    for (const t of this.queue) delete t.gainDb;
+    const { db } = await import("@/core/library/db");
+    await db.tracks.toCollection().modify((t) => {
+      if (t.gainDb != null) delete t.gainDb;
+    });
+    // the live source drops back to unity with a gentle glide
+    const g = this.srcGainFor(this.el);
+    if (g && this.ctx && !this.transitioning) {
+      const t = this.ctx.currentTime;
+      g.gain.cancelScheduledValues(t);
+      g.gain.setValueAtTime(g.gain.value, t);
+      g.gain.linearRampToValueAtTime(1, t + 0.6);
+    } else if (g && this.ctx) {
+      g.gain.value = 1;
+    }
+  }
+
   /** Advance past unplayable/unresolvable tracks; stop after a full lap. */
   private skipAndContinue() {
     this.skipAttempts++;
     this.emit({ isPlaying: false });
+    // silence the outgoing element: otherwise a failed transition leaves the
+    // previous track audibly playing while the UI says paused
+    this.stopOutgoing();
     if (this.queue.length > 1 && this.skipAttempts < this.queue.length) {
       void this.next(true);
     }
+  }
+
+  /** Halt and unload the active element (used when abandoning a transition). */
+  private stopOutgoing() {
+    const el = this.el;
+    el.pause();
+    el.removeAttribute("src");
+    el.load();
   }
 
   async jumpTo(queueIndex: number) {
@@ -411,12 +499,21 @@ class AudioEngine {
 
   /** Tracks coming after the current one, in play order. */
   upNext(): TrackMeta[] {
+    return this.upNextEntries().map((e) => e.track);
+  }
+
+  /** Up-next rows with their queue indices: jump/remove need real indices. */
+  upNextEntries(): { track: TrackMeta; queueIndex: number }[] {
     if (this.queue.length === 0) return [];
-    if (!this.shuffle) return this.queue.slice(this.index + 1);
+    if (!this.shuffle) {
+      return this.queue
+        .slice(this.index + 1)
+        .map((track, i) => ({ track, queueIndex: this.index + 1 + i }));
+    }
     return this.shuffleOrder
       .slice(this.index + 1)
-      .map((qi) => this.queue[qi])
-      .filter(Boolean);
+      .map((qi) => ({ track: this.queue[qi], queueIndex: qi }))
+      .filter((e) => e.track);
   }
 
   /** Insert a track to play immediately after the current one. */
@@ -425,20 +522,20 @@ class AudioEngine {
       void this.playQueue([track], 0);
       return;
     }
-    const curPath = this.current?.path;
-    const slot = this.queue.findIndex((t) => t.path === curPath) + 1;
+    const curQueueIdx = this.orderIndexToQueue(this.index);
+    const slot = curQueueIdx + 1;
     this.queue.splice(slot, 0, track);
     if (this.shuffle) {
       // guarantee "plays next": current, new track, then the rest reshuffled
-      const rest = this.queue.map((_, i) => i).filter((i) => i !== this.index && i !== slot);
+      const rest = this.queue.map((_, i) => i).filter((i) => i !== curQueueIdx && i !== slot);
       for (let i = rest.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * rest.length);
         [rest[i], rest[j]] = [rest[j], rest[i]];
       }
-      this.shuffleOrder = [this.index, slot, ...rest];
+      this.shuffleOrder = [curQueueIdx, slot, ...rest];
       this.index = 0;
     }
-    this.emit({ queue: [...this.queue], index: this.index });
+    this.emit({ queue: [...this.queue], index: this.emitIndex() });
   }
 
   /** Append a track to the end of the queue (plays after everything queued). */
@@ -449,7 +546,7 @@ class AudioEngine {
     }
     this.queue.push(track);
     if (this.shuffle) this.shuffleOrder.push(this.queue.length - 1);
-    this.emit({ queue: [...this.queue], index: this.index });
+    this.emit({ queue: [...this.queue], index: this.emitIndex() });
   }
 
   /**
@@ -463,16 +560,14 @@ class AudioEngine {
     if (this.queue[from].path === cur.path) return;
     const [moved] = this.queue.splice(from, 1);
     this.queue.splice(Math.max(0, Math.min(to, this.queue.length)), 0, moved);
-    this.index = Math.max(0, this.queue.findIndex((t) => t.path === cur.path));
+    const curQueueIdx = Math.max(0, this.queue.findIndex((t) => t.path === cur.path));
     if (this.shuffle) {
-      this.shuffleOrder = this.queue.map((_, i) => i);
-      const at = this.shuffleOrder.indexOf(this.index);
-      if (at > 0) {
-        this.shuffleOrder.splice(at, 1);
-        this.shuffleOrder.unshift(this.index);
-      }
+      this.pinCurrentInShuffle(curQueueIdx);
+      this.index = 0;
+    } else {
+      this.index = curQueueIdx;
     }
-    this.emit({ queue: [...this.queue], index: this.index });
+    this.emit({ queue: [...this.queue], index: this.emitIndex() });
   }
 
   /** Remove a queued track (the currently-playing one is protected). */
@@ -481,16 +576,14 @@ class AudioEngine {
     if (queueIndex < 0 || queueIndex >= this.queue.length || !cur) return;
     if (this.queue[queueIndex].path === cur.path) return;
     this.queue.splice(queueIndex, 1);
-    this.index = Math.max(0, this.queue.findIndex((t) => t.path === cur.path));
+    const curQueueIdx = Math.max(0, this.queue.findIndex((t) => t.path === cur.path));
     if (this.shuffle) {
-      this.shuffleOrder = this.queue.map((_, i) => i);
-      const at = this.shuffleOrder.indexOf(this.index);
-      if (at > 0) {
-        this.shuffleOrder.splice(at, 1);
-        this.shuffleOrder.unshift(this.index);
-      }
+      this.pinCurrentInShuffle(curQueueIdx);
+      this.index = 0;
+    } else {
+      this.index = curQueueIdx;
     }
-    this.emit({ queue: [...this.queue], index: this.index });
+    this.emit({ queue: [...this.queue], index: this.emitIndex() });
   }
 
   /** Drop everything after the current track. */
@@ -499,9 +592,13 @@ class AudioEngine {
     if (!cur) return;
     const curIdx = this.queue.findIndex((t) => t.path === cur.path);
     this.queue = this.queue.slice(0, curIdx + 1);
-    this.index = curIdx;
-    if (this.shuffle) this.shuffleOrder = [curIdx];
-    this.emit({ queue: [...this.queue], index: this.index });
+    if (this.shuffle) {
+      this.shuffleOrder = [curIdx];
+      this.index = 0;
+    } else {
+      this.index = curIdx;
+    }
+    this.emit({ queue: [...this.queue], index: this.emitIndex() });
   }
 
   private bumpPlayCount(track: TrackMeta) {
@@ -510,9 +607,19 @@ class AudioEngine {
     track.lastPlayedAt = at;
     void import("@/core/library/db").then(({ db }) =>
       db.transaction("rw", db.tracks, db.plays, async () => {
-        await db.tracks.update(track.id, { playCount: track.playCount, lastPlayedAt: at });
+        // a 32-bit hash id can collide with an unrelated local row: never
+        // write stats onto (or shadow-put over) someone else's track
+        const byId = await db.tracks.get(track.id);
+        const ours = !byId || byId.path === track.path;
+        const updated = ours ? await db.tracks.update(track.id, { playCount: track.playCount, lastPlayedAt: at }) : 0;
+        if (!updated && ours && (track.source ?? "local") === "cloud") {
+          // cloud rows aren't stored locally: keep a shadow row purely for
+          // play stats; the manifest still owns the metadata (merged in
+          // useAllTracks, which prefers the manifest's copy)
+          await db.tracks.put({ ...track, playCount: track.playCount, lastPlayedAt: at });
+        }
         const id = await db.plays.add({ trackId: track.id, at });
-        // keep the log bounded — prune in batches
+        // keep the log bounded: prune in batches
         if (typeof id === "number" && id % 500 === 0) {
           const stale = await db.plays.orderBy("id").limit(Math.max(0, id - 5000)).primaryKeys();
           await db.plays.bulkDelete(stale);
@@ -569,7 +676,15 @@ class AudioEngine {
   }
 
   seek(t: number) {
-    if (Number.isFinite(t)) this.el.currentTime = Math.max(0, Math.min(t, this.el.duration || t));
+    if (!Number.isFinite(t)) return;
+    const clamped = Math.max(0, Math.min(t, this.el.duration || t));
+    // restored-but-unloaded track: the element has no duration yet: carry the
+    // user's seek into the pending load instead of dropping it
+    if (this.pendingLoad) {
+      this.pendingSeek = clamped;
+      return;
+    }
+    this.el.currentTime = clamped;
   }
 
   getPosition() {
@@ -577,13 +692,17 @@ class AudioEngine {
   }
 
   setVolume(v: number) {
-    this.userVolume = Math.max(0, Math.min(1, v));
+    // the slider is linear but loudness isn't: square the position so the
+    // low half of the slider actually spans the quiet range instead of
+    // cramming "silent to loud" into the last few notches
+    const slider = Math.max(0, Math.min(1, v));
+    this.userVolume = slider * slider;
     this.elA.volume = this.userVolume;
     this.elB.volume = this.userVolume;
-    this.emit({ volume: this.userVolume });
+    this.emit({ volume: slider });
   }
 
-  /** Post-analyser monitor level — silence the speakers without killing the FFT. */
+  /** Post-analyser monitor level: silence the speakers without killing the FFT. */
   setMonitorGain(v: number) {
     if (this.gain) this.gain.gain.value = Math.max(0, Math.min(1, v));
   }
@@ -611,7 +730,7 @@ class AudioEngine {
         this.index = 0;
         await this.playCurrent();
       } else if (!auto) {
-        // manual next past the end wraps anyway — feels better in a player
+        // manual next past the end wraps anyway: feels better in a player
         this.index = 0;
         await this.playCurrent();
       } else if (this.autoplayEnabled) {
@@ -646,10 +765,19 @@ class AudioEngine {
 
   setShuffle(on: boolean) {
     this.shuffle = on;
-    if (on) this.buildShuffleOrder();
-    else this.shuffleOrder = [];
+    if (on) {
+      // `this.index` was a queue index under shuffle-off: buildShuffleOrder
+      // pins that track first and rebases index to a play-order position
+      this.buildShuffleOrder();
+    } else {
+      // re-index from play order back to plain queue position, keeping the
+      // same track current
+      this.shuffleOrder = [];
+      const cur = this.current;
+      this.index = cur ? Math.max(0, this.queue.findIndex((t) => t.path === cur.path)) : 0;
+    }
     // re-index to keep the current track selected
-    this.emit({ shuffle: on });
+    this.emit({ shuffle: on, index: this.emitIndex() });
   }
 
   setRepeat(mode: RepeatMode) {
@@ -657,12 +785,12 @@ class AudioEngine {
     this.emit({ repeat: mode });
   }
 
-  /** Show a restored track as current without loading audio — the next play() loads it first. */
+  /** Show a restored track as current without loading audio: the next play() loads it first. */
   restoreTrack(track: TrackMeta, pos = 0) {
     this.restoreQueue([track], 0, pos);
   }
 
-  /** Restore a whole queue (paused) — e.g. from the persisted last session. */
+  /** Restore a whole queue (paused): e.g. from the persisted last session. */
   restoreQueue(queue: TrackMeta[], index: number, pos = 0) {
     if (queue.length === 0) return;
     this.queue = [...queue];
@@ -672,12 +800,12 @@ class AudioEngine {
     this.pendingSeek = Number.isFinite(pos) && pos > 1 ? pos : null;
     const track = this.current;
     const start = Number.isFinite(pos) ? Math.max(0, Math.min(pos, track?.duration || pos)) : 0;
-    this.emit({ queue: [...this.queue], index: this.index, duration: track?.duration || 0, position: start, isPlaying: false });
+    this.emit({ queue: [...this.queue], index: this.emitIndex(), duration: track?.duration || 0, position: start, isPlaying: false });
   }
 
   /**
-   * Autoplay: append up to `n` tracks related to the current one — shared
-   * genre tags score highest, then same artist/album — skipping anything
+   * Autoplay: append up to `n` tracks related to the current one: shared
+   * genre tags score highest, then same artist/album: skipping anything
    * already queued. Returns how many were appended.
    */
   private async extendWithSimilar(n = 10): Promise<number> {
@@ -688,31 +816,32 @@ class AudioEngine {
     const exclude = new Set(this.queue.map((t) => t.id));
     const picks = pickSimilar(seed, all, exclude, n);
     for (const p of picks) this.addToQueue(p);
-    if (picks.length > 0) toast(`Autoplay — ${picks.length} similar added`, "info", "オートプレイ");
+    if (picks.length > 0) toast(`Autoplay: ${picks.length} similar added`, "info", "オートプレイ");
     return picks.length;
   }
 
   // ---- fades ----------------------------------------------------------------
 
-  /** Cancelable-in-practice volume ramp for the no-graph fallback path. */
+  /** Cancelable volume ramp for the no-graph fallback path: per element, so
+   *  crossfade's simultaneous in/out ramps don't cancel each other. */
+  /** Per-element volume-ramp timers for the no-graph fallback (see rampVolume). */
+  private fadeTimers = new Map<HTMLAudioElement, number>();
+
   private rampVolume(el: HTMLAudioElement, from: number, to: number, ms: number, onDone?: () => void) {
-    if (this.fadeTimer != null) {
-      window.clearInterval(this.fadeTimer);
-      this.fadeTimer = null;
-    }
+    const prev = this.fadeTimers.get(el);
+    if (prev != null) window.clearInterval(prev);
     el.volume = Math.max(0, Math.min(1, from));
     const t0 = performance.now();
-    this.fadeTimer = window.setInterval(() => {
+    const timer = window.setInterval(() => {
       const k = Math.min(1, (performance.now() - t0) / ms);
       el.volume = Math.max(0, Math.min(1, from + (to - from) * k));
       if (k >= 1) {
-        if (this.fadeTimer != null) {
-          window.clearInterval(this.fadeTimer);
-          this.fadeTimer = null;
-        }
+        if (this.fadeTimers.get(el) === timer) this.fadeTimers.delete(el);
+        window.clearInterval(timer);
         onDone?.();
       }
     }, 40);
+    this.fadeTimers.set(el, timer);
   }
 
   private fadeIn(el: HTMLAudioElement, track?: TrackMeta) {
@@ -793,12 +922,13 @@ class AudioEngine {
     let idx =
       nextIdx ?? (this.index + 1 < this.queue.length ? this.index + 1 : this.repeat === "all" ? 0 : -1);
     if (idx < 0 && this.autoplayEnabled) {
-      // queue ran dry mid-crossfade — extend with similar tracks first
+      // queue ran dry mid-crossfade: extend with similar tracks first
       const added = await this.extendWithSimilar();
       if (added > 0) idx = this.index + 1;
     }
     if (idx < 0 || idx >= this.queue.length) return;
-    const track = this.queue[idx];
+    // idx is a play-order position: resolve it to the queued track
+    const track = this.queue[this.orderIndexToQueue(idx)];
     const oldEl = this.el;
     const newEl = this.inactiveEl();
     this.transitioning = true;
@@ -818,17 +948,21 @@ class AudioEngine {
       return;
     }
     this.skipAttempts = 0;
-    this.index = idx;
-    this.el = newEl;
-    this.emit({ queue: [...this.queue], index: idx, duration: track.duration || 0, position: 0 });
-    this.updateMediaSession(track);
     try {
       await newEl.play();
     } catch (e) {
+      // don't adopt the incoming element on failure: the old track is still
+      // audible and must stay in control
       console.warn("AudioEngine: crossfade play() rejected", e);
+      newEl.pause();
       this.transitioning = false;
+      this.skipAndContinue();
       return;
     }
+    this.index = idx;
+    this.el = newEl;
+    this.emit({ queue: [...this.queue], index: this.emitIndex(), duration: track.duration || 0, position: 0 });
+    this.updateMediaSession(track);
     this.bumpPlayCount(track);
 
     const oldGain = this.srcGainFor(oldEl);
@@ -849,7 +983,7 @@ class AudioEngine {
       window.setTimeout(() => {
         oldEl.pause();
         oldGain.gain.cancelScheduledValues(this.ctx!.currentTime);
-        oldGain.gain.value = 1; // recycled as the preloader — fadeIn sets the right base later
+        oldGain.gain.value = 1; // recycled as the preloader: fadeIn sets the right base later
       }, this.crossfadeMs + 40);
     } else {
       this.rampVolume(oldEl, oldEl.volume, 0, this.crossfadeMs, () => {
@@ -860,7 +994,7 @@ class AudioEngine {
     window.setTimeout(() => {
       this.transitioning = false;
     }, this.crossfadeMs + 80);
-    // the outgoing element is idle again — warm up the track after this one
+    // the outgoing element is idle again: warm up the track after this one
     const upNext = this.queue[this.orderIndexToQueue(idx + 1)];
     if (upNext) void this.resolveAndLoad(upNext, oldEl);
     this.scheduleLoudnessLearn(track);

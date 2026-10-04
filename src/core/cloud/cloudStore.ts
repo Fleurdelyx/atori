@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import {
+  anonymousStreamUrl,
   cachedTrackUrl,
+  catalogueReady,
   cloudConfigured,
   CloudAuthError,
   fetchManifest,
@@ -35,7 +37,7 @@ export const useCloud = create<CloudState>()((set) => ({
     } catch (e) {
       if (e instanceof CloudAuthError) {
         useAuth.getState().setSessionExpired(true);
-        set({ status: "error", error: "Session expired — sign in again" });
+        set({ status: "error", error: "Session expired: sign in again" });
         return;
       }
       set({ status: "error", error: String(e).slice(0, 120) });
@@ -58,12 +60,14 @@ export function wireCloud() {
     if (track.source !== "cloud") return null;
     const cached = await cachedTrackUrl(track.path);
     if (cached) return cached;
-    if (!cloudConfigured()) return null;
-    return streamUrlFor(track.path);
+    if (cloudConfigured()) return streamUrlFor(track.path);
+    // anonymous catalogue playback: public keys stream without a session
+    if (track.path.startsWith("catalogue/") && catalogueReady()) return anonymousStreamUrl(track.path);
+    return null;
   };
 
   engine.onCloudStreamError = () => {
-    // probe the session once — audio errors can also be codec/bad-file issues
+    // probe the session once: audio errors can also be codec/bad-file issues
     void (async () => {
       const auth = useAuth.getState();
       if (!auth.sessionToken || !auth.serverUrl) return;
@@ -72,7 +76,7 @@ export function wireCloud() {
       if (!user) {
         useAuth.getState().setSessionExpired(true);
         useAuth.getState().setAuthOpen(true);
-        toast("Session expired — sign in again", "error", "セッション切れ");
+        toast("Session expired: sign in again", "error", "セッション切れ");
       }
     })();
   };

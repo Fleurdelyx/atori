@@ -1,7 +1,7 @@
 import { splitGenres, type TrackMeta } from "@/core/library/types";
 
 /**
- * Autoplay picker — "keep the music going" when the queue runs dry.
+ * Autoplay picker: "keep the music going" when the queue runs dry.
  * Tracks sharing genre tags with the seed score highest (each shared tag
  * counts), then same artist/album; within a score band the order is
  * shuffled so repeats feel fresh. Pure + unit-tested.

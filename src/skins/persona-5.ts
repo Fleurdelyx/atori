@@ -1,7 +1,7 @@
 import type { SkinDef } from "./types";
 
 /**
- * PERSONA — Persona 5-inspired theme.
+ * PERSONA: Persona 5-inspired theme.
  * Take-your-heart red on black, jagged white textboxes with black outlines,
  * halftone print texture, heavy condensed type, aggressive slash motion.
  */

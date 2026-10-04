@@ -1,38 +1,63 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useMotionValue, useSpring } from "motion/react";
 import {
   ChevronDown,
+  Heart,
   ListMusic,
+  Maximize,
+  Minimize,
   Pause,
   Play,
   Repeat,
-  Repeat1,
   Shuffle,
   SkipBack,
   SkipForward,
+  X,
 } from "lucide-react";
+import { RepeatOneIcon } from "@/ui/kit/RepeatOneIcon";
 import { usePlayback } from "@/core/audio/playbackStore";
+import { useFavorites } from "@/core/cloud/favoritesStore";
 import { engine } from "@/core/audio/AudioEngine";
 import { useUi } from "@/state/uiStore";
 import { useSkin } from "@/skins/SkinProvider";
 import { fx } from "@/fx/FxDirector";
 import { HoloCover } from "@/ui/kit/HoloCover";
 import { GradeBadge } from "@/ui/kit/GradeBadge";
+import { VolumeControl } from "@/ui/kit/VolumeControl";
 import { KineticText } from "@/ui/kit/KineticText";
 import { SpectrumBars } from "@/ui/kit/SpectrumBars";
 import { formatTime, isVideoFormat } from "@/core/library/types";
 import { LyricsSheet } from "@/ui/kit/LyricsSheet";
 import { TrackVisual } from "@/ui/kit/TrackVisual";
 import { useVisual } from "@/core/library/visuals";
+import { inTauriShell, tauriSetFullscreen } from "@/core/library/shellIngest";
 
-/** Seek bar with drag support; rAF feed while idle. */
+/** Seek bar with drag support; rAF feed while idle. The diamond handle
+ *  auto-fades: revealed by hover/drag, gone ~1.6s after the last interaction. */
 function SeekBar() {
   const duration = usePlayback((s) => s.duration);
-  const [dragPct, setDragPct] = useState<number | null>(null);
   const fillRef = useRef<HTMLDivElement>(null);
+  const handleRef = useRef<HTMLDivElement>(null);
   const timeRef = useRef<HTMLSpanElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
+  const hideTimer = useRef<number | null>(null);
+
+  const wakeHandle = () => {
+    if (handleRef.current) handleRef.current.style.opacity = "1";
+    if (hideTimer.current != null) window.clearTimeout(hideTimer.current);
+    hideTimer.current = window.setTimeout(() => {
+      hideTimer.current = null;
+      if (handleRef.current && !dragging.current) handleRef.current.style.opacity = "0";
+    }, 1000);
+  };
+
+  useEffect(
+    () => () => {
+      if (hideTimer.current != null) window.clearTimeout(hideTimer.current);
+    },
+    [],
+  );
 
   // live position while not dragging
   useEffect(() => {
@@ -45,6 +70,7 @@ function SeekBar() {
       const t = engine.el.duration ? engine.el.currentTime : usePlayback.getState().position;
       const pct = d > 0 ? t / d : 0;
       fillRef.current.style.transform = `scaleX(${pct.toFixed(4)})`;
+      if (handleRef.current) handleRef.current.style.left = `${(pct * 100).toFixed(3)}%`;
       if (timeRef.current) timeRef.current.textContent = formatTime(t);
     };
     raf = requestAnimationFrame(loop);
@@ -57,27 +83,39 @@ function SeekBar() {
     return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
   };
 
+  const preview = (clientX: number) => {
+    const pct = pctFromEvent(clientX);
+    // move fill and handle together: the fill keeps its playback position
+    // otherwise and visibly disagrees with the handle mid-drag
+    if (fillRef.current) fillRef.current.style.transform = `scaleX(${pct.toFixed(4)})`;
+    if (handleRef.current) handleRef.current.style.left = `${(pct * 100).toFixed(3)}%`;
+    return pct;
+  };
+
   const d = duration || 0;
 
   return (
     <div>
       <div
         ref={barRef}
-        className="group relative h-6 cursor-pointer select-none"
+        className="group relative h-6 cursor-pointer touch-none select-none"
+        onPointerEnter={wakeHandle}
+        onPointerMove={(e) => {
+          wakeHandle();
+          if (dragging.current) preview(e.clientX);
+        }}
         onPointerDown={(e) => {
           dragging.current = true;
           (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-          setDragPct(pctFromEvent(e.clientX));
-        }}
-        onPointerMove={(e) => {
-          if (dragging.current) setDragPct(pctFromEvent(e.clientX));
+          preview(e.clientX);
         }}
         onPointerUp={(e) => {
           if (!dragging.current) return;
           dragging.current = false;
-          const pct = pctFromEvent(e.clientX);
-          engine.seek(pct * (engine.el.duration || 0));
-          setDragPct(null);
+          engine.seek(pctFromEvent(e.clientX) * (engine.el.duration || 0));
+        }}
+        onPointerCancel={() => {
+          dragging.current = false;
         }}
       >
         <div className="absolute top-1/2 right-0 left-0 h-[3px] -translate-y-1/2 bg-line" />
@@ -90,11 +128,11 @@ function SeekBar() {
             background: "linear-gradient(90deg, var(--ato-accent-2), var(--ato-accent))",
           }}
         />
-        {/* handle */}
+        {/* handle: opacity driven by wakeHandle (hover/drag, fast fade when idle) */}
         <div
-          className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 opacity-0 transition-opacity group-hover:opacity-100"
+          ref={handleRef}
+          className="absolute top-1/2 left-0 h-3 w-3 -translate-y-1/2 rotate-45 opacity-0 transition-opacity duration-300"
           style={{
-            left: `${(dragPct ?? 0) * 100}%`,
             background: "var(--ato-accent)",
             boxShadow: "0 0 12px var(--ato-accent)",
           }}
@@ -160,7 +198,7 @@ function CoverStage({ open, flat = false }: { open: boolean; flat?: boolean }) {
   );
 }
 
-function Controls({ flat = false }: { flat?: boolean }) {
+function Controls({ flat = false, lead, trail }: { flat?: boolean; lead?: ReactNode; trail?: ReactNode }) {
   const isPlaying = usePlayback((s) => s.isPlaying);
   const shuffle = usePlayback((s) => s.shuffle);
   const repeat = usePlayback((s) => s.repeat);
@@ -169,16 +207,44 @@ function Controls({ flat = false }: { flat?: boolean }) {
   const prev = usePlayback((s) => s.prev);
   const cycleRepeat = usePlayback((s) => s.cycleRepeat);
   const toggleShuffle = usePlayback((s) => s.toggleShuffle);
+  const current = usePlayback((s) => s.current);
+  const liked = useFavorites((s) => (current ? s.keys.includes(current.path) : false));
+  const toggleLiked = useFavorites((s) => s.toggle);
 
   const btn = "p-2.5 text-dim transition-colors hover:text-accent";
   return (
-    <div className="flex items-center gap-3" data-testid="np-controls">
-      <button aria-label="Shuffle" className={btn} onClick={toggleShuffle} style={{ color: shuffle ? "var(--ato-accent)" : undefined }}>
-        <Shuffle className="h-5 w-5" />
-      </button>
-      <button aria-label="Previous" className={btn} onClick={prev}>
-        <SkipBack className="h-7 w-7" />
-      </button>
+    // Spotify's 3-zone transport: like+shuffle far left, prev/play/next dead
+    // center, repeat+queue far right: the play button is ALWAYS centered
+    // (the 1fr side zones are equal width). Theatre docks its fullscreen
+    // toggle and ESC hint into these zones via lead/trail so nothing can
+    // overlap the buttons.
+    // No w-full here: in theatre the cluster must shrink-wrap so the outer
+    // grid can center it; wrappers provide the width everywhere else.
+    <div
+      className="grid grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)] items-center"
+      data-testid="np-controls"
+    >
+      <div className="flex items-center gap-3 justify-self-start">
+        {lead}
+        {current && (
+          <button
+            aria-label={liked ? "Unlike" : "Like"}
+            className={btn}
+            onClick={() => toggleLiked(current.path)}
+            style={liked ? { color: "var(--ato-accent)" } : undefined}
+            title={liked ? "Liked" : "Like"}
+          >
+            <Heart className="h-5 w-5" fill={liked ? "var(--ato-accent)" : "none"} />
+          </button>
+        )}
+        <button aria-label="Shuffle" className={btn} onClick={toggleShuffle} style={{ color: shuffle ? "var(--ato-accent)" : undefined }}>
+          <Shuffle className="h-5 w-5" />
+        </button>
+      </div>
+      <div className="flex items-center gap-3">
+        <button aria-label="Previous" className={btn} onClick={prev}>
+          <SkipBack className="h-7 w-7" />
+        </button>
       {flat ? (
         // soft-pop circular outlined play button
         <button
@@ -216,12 +282,16 @@ function Controls({ flat = false }: { flat?: boolean }) {
       <button aria-label="Next" className={btn} onClick={next}>
         <SkipForward className="h-7 w-7" />
       </button>
-      <button aria-label={`Repeat ${repeat}`} className={btn} onClick={cycleRepeat} style={{ color: repeat !== "off" ? "var(--ato-accent)" : undefined }}>
-        {repeat === "one" ? <Repeat1 className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
-      </button>
-      <button aria-label="Queue" className={btn} onClick={() => useUi.getState().setQueueOpen(true)}>
-        <ListMusic className="h-5 w-5" />
-      </button>
+      </div>
+      <div className="flex items-center gap-3 justify-self-end">
+        <button aria-label={`Repeat ${repeat}`} className={btn} onClick={cycleRepeat} style={{ color: repeat !== "off" ? "var(--ato-accent)" : undefined }}>
+          {repeat === "one" ? <RepeatOneIcon className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
+        </button>
+        <button aria-label="Queue" className={btn} onClick={() => useUi.getState().setQueueOpen(true)}>
+          <ListMusic className="h-5 w-5" />
+        </button>
+        {trail}
+      </div>
     </div>
   );
 }
@@ -239,6 +309,52 @@ function EmptyStage() {
   );
 }
 
+/** Smart volume status chip under the volume slider: shows the learned
+ *  correction while it applies, or that a track is being measured, so the
+ *  feature is visible in use. Renders nothing when smart volume is off. */
+function SmartVolChip() {
+  const smart = useUi((s) => s.smartVolume);
+  const gainDb = usePlayback((s) => s.current?.gainDb ?? null);
+  const [learning, setLearning] = useState(false);
+  useEffect(() => {
+    if (!smart) return;
+    const t = setInterval(() => setLearning(engine.learningVolume), 1000);
+    return () => clearInterval(t);
+  }, [smart]);
+
+  if (!smart) return null;
+  const styled = {
+    padding: "2px 8px",
+    borderRadius: "9999px",
+    border: "1px solid var(--ato-border)",
+    color: "var(--ato-text-dim)",
+  };
+  if (learning && gainDb === null) {
+    return (
+      <div className="mt-2 flex w-full justify-center">
+        <span className="font-mono animate-pulse whitespace-nowrap" style={styled} title="Smart volume is measuring this track's loudness">
+          LEARNING VOL…
+        </span>
+      </div>
+    );
+  }
+  if (gainDb !== null && Math.abs(gainDb) >= 0.3) {
+    return (
+      <div className="mt-2 flex w-full justify-center">
+        <span
+          className="font-mono whitespace-nowrap"
+          style={{ ...styled, color: "var(--ato-accent-2)", borderColor: "var(--ato-accent-2)" }}
+          title="Smart volume correction applied to this track"
+        >
+          SMART {gainDb > 0 ? "+" : ""}
+          {gainDb.toFixed(1)}DB
+        </span>
+      </div>
+    );
+  }
+  return null;
+}
+
 export function NowPlayingOverlay() {
   const open = useUi((s) => s.nowPlayingOpen);
   const setOpen = useUi((s) => s.setNowPlayingOpen);
@@ -249,6 +365,43 @@ export function NowPlayingOverlay() {
   const skin = useSkin();
   const [lyricsOpen, setLyricsOpen] = useState(false);
   const [theatre, setTheatre] = useState(false);
+  // true OS fullscreen for the theatre stage: HTML5 fullscreen in the
+  // browser, plus the native window in the desktop shell
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const stageRef = useRef<HTMLElement | null>(null);
+
+  // stay in sync with every exit path (Esc, browser UI, unmount)
+  useEffect(() => {
+    const onChange = () => {
+      const active = document.fullscreenElement === stageRef.current;
+      setIsFullscreen(active);
+      if (!active) void tauriSetFullscreen(false);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  // leaving the overlay or theatre always drops back out of fullscreen
+  useEffect(() => {
+    if ((!theatre || !open) && document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+      void tauriSetFullscreen(false);
+    }
+  }, [theatre, open]);
+
+  const toggleStageFullscreen = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+      void tauriSetFullscreen(false);
+      return;
+    }
+    if (!stageRef.current) return;
+    void stageRef.current
+      .requestFullscreen?.()
+      .catch(() => setIsFullscreen(false));
+    void tauriSetFullscreen(true);
+    setIsFullscreen(true); // fullscreenchange may lag a beat: optimistic
+  };
   // user override wins; otherwise the skin suggests (soft-pop family = flat)
   const flat = npFlat ?? (skin.flatPlayer ?? false);
   // canvas layer: attached clip/gif or a video source file
@@ -266,7 +419,7 @@ export function NowPlayingOverlay() {
           exit={{ opacity: 0 }}
           transition={{ duration: calm ? 0.2 : 0.45, ease: [0.16, 1, 0.3, 1] }}
         >
-          {/* readability veil over the shader — skipped in flat mode, the bg is already solid */}
+          {/* readability veil over the shader: skipped in flat mode, the bg is already solid */}
           {!flat && (
             <div
               className="absolute inset-0"
@@ -279,35 +432,62 @@ export function NowPlayingOverlay() {
 
           {/* top bar */}
           <div className="relative z-10 flex items-center justify-between px-6 py-4">
-            <button
-              onClick={() => setOpen(false)}
-              className="clip-tag font-mono flex items-center gap-2 px-4 py-2 text-[10px] tracking-[0.3em] text-dim backdrop-blur-md hover:text-accent"
-              style={{ background: "var(--ato-panel)" }}
-            >
-              <ChevronDown className="h-3.5 w-3.5" /> CLOSE
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  // with a live track, "closing" minimizes into the floating
+                  // bubble (YT-premium style); CLOSE next to it skips that
+                  if (current) useUi.getState().setMiniBubble(true);
+                  setOpen(false);
+                }}
+                className="clip-tag font-mono flex items-center gap-2 px-4 py-2 text-[10px] tracking-[0.3em] text-dim backdrop-blur-md hover:text-accent"
+                style={{ background: "var(--ato-panel)" }}
+                title={current ? "Minimize to the floating mini player" : "Close"}
+              >
+                <ChevronDown className="h-3.5 w-3.5" /> {current ? "MINIMIZE" : "CLOSE"}
+              </button>
+              {current && (
+                <button
+                  onClick={() => {
+                    // full close: never lands in the mini player
+                    useUi.getState().setMiniBubble(false);
+                    setOpen(false);
+                  }}
+                  className="clip-tag flex items-center px-3 py-2 text-dim backdrop-blur-md hover:text-accent"
+                  style={{ background: "var(--ato-panel)" }}
+                  title="Close (no mini player)"
+                  aria-label="Close Now Playing"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-3">
               {hasVisual && (
                 <button
                   onClick={() => setTheatre(!theatre)}
-                  className="font-mono rounded-full px-3 py-1 text-[9px] tracking-[0.25em] transition-colors"
+                  className="np-mode-pill font-mono rounded-full px-3 py-1 text-[9px] tracking-[0.25em]"
                   style={{
-                    border: `1px solid ${theatre ? "var(--ato-text)" : "var(--ato-border)"}`,
-                    color: theatre ? "var(--ato-text)" : "var(--ato-text-dim)",
-                    background: theatre ? "color-mix(in srgb, var(--ato-text) 12%, transparent)" : "transparent",
+                    border: `1px solid ${theatre ? "var(--ato-text)" : "color-mix(in srgb, var(--ato-text) 35%, transparent)"}`,
+                    color: theatre ? "var(--ato-text)" : "color-mix(in srgb, var(--ato-text) 80%, transparent)",
+                    background: theatre
+                      ? "color-mix(in srgb, var(--ato-text) 12%, transparent)"
+                      : "color-mix(in srgb, var(--ato-panel) 72%, transparent)",
                   }}
-                  title="Theatre mode — video front and center"
+                  title="Theatre mode: video front and center"
                 >
                   THEATRE {theatre ? "✓" : ""}
                 </button>
               )}
               <button
                 onClick={() => setNpFlat(!flat)}
-                className="font-mono rounded-full px-3 py-1 text-[9px] tracking-[0.25em] transition-colors"
+                className="np-mode-pill font-mono rounded-full px-3 py-1 text-[9px] tracking-[0.25em]"
                 style={{
-                  border: `1px solid ${flat ? "var(--ato-text)" : "var(--ato-border)"}`,
-                  color: flat ? "var(--ato-text)" : "var(--ato-text-dim)",
-                  background: flat ? "color-mix(in srgb, var(--ato-text) 12%, transparent)" : "transparent",
+                  border: `1px solid ${flat ? "var(--ato-text)" : "color-mix(in srgb, var(--ato-text) 35%, transparent)"}`,
+                  color: flat ? "var(--ato-text)" : "color-mix(in srgb, var(--ato-text) 80%, transparent)",
+                  background: flat
+                    ? "color-mix(in srgb, var(--ato-text) 12%, transparent)"
+                    : "color-mix(in srgb, var(--ato-panel) 72%, transparent)",
                 }}
                 title="Toggle the centered flat-player layout"
               >
@@ -318,27 +498,78 @@ export function NowPlayingOverlay() {
           </div>
 
           {current && theatre && hasVisual ? (
-            /* THEATRE — the video owns the room, controls docked underneath */
-            <main className="relative z-10 flex min-h-0 flex-1 flex-col px-6 pb-3">
-              <div className="grid min-h-0 flex-1 place-items-center">
-                <TrackVisual track={current} className="max-h-full w-full object-contain" rounded={false} />
+            /* THEATRE: the video owns the room, controls docked underneath
+               over a gradient scrim so they stay readable on bright footage.
+               The stage supports true fullscreen (button or double-click). */
+            <main
+              ref={stageRef}
+              className={`relative z-10 flex min-h-0 flex-1 flex-col px-6 pb-10 ${isFullscreen ? "bg-black" : ""}`}
+            >
+              {/* absolute-fill keeps the video's box definite at any nesting
+                  depth: percentage max-heights fail in this flex chain and
+                  let the video overflow behind the controls */}
+              <div
+                className="relative min-h-0 flex-1"
+                onDoubleClick={toggleStageFullscreen}
+                title="Double-click to toggle fullscreen"
+              >
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <TrackVisual track={current} className="max-h-full max-w-full object-contain" rounded={false} />
+                </div>
               </div>
-              <div className="mx-auto w-full max-w-3xl pt-3">
-                <div className="flex items-baseline justify-between gap-4">
-                  <h1 className="font-display min-w-0 truncate text-xl font-bold">{current.title}</h1>
-                  <p className="font-jp shrink-0 truncate text-sm text-dim">{current.artist}</p>
-                </div>
-                <div className="mt-2">
-                  <SeekBar />
-                </div>
-                <div className="mt-3 flex justify-center">
-                  <Controls flat />
+              <div className="relative">
+                {/* readability scrim: skin-bg gradient so light skins stay light */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-[-1.5rem] top-0 -bottom-3"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, transparent, color-mix(in srgb, var(--ato-bg) 55%, transparent) 38%, color-mix(in srgb, var(--ato-bg) 92%, transparent) 100%)",
+                  }}
+                />
+                  <div className="relative mx-auto w-full max-w-3xl pt-3">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <h1 className="font-display min-w-0 truncate text-xl font-bold">{current.title}</h1>
+                    <p className="font-jp shrink-0 truncate text-sm text-dim">{current.artist}</p>
+                  </div>
+                  <div className="mt-2">
+                    <SeekBar />
+                  </div>
+                  <div className="relative mt-3 w-full">
+                    {/* ESC hint docks INSIDE the transport's left zone */}
+                    <Controls
+                      flat
+                      lead={
+                        isFullscreen ? (
+                          <span className="font-mono text-[9px] tracking-[0.25em] text-dim opacity-70">
+                            ESC TO EXIT
+                          </span>
+                        ) : undefined
+                      }
+                      trail={
+                        <button
+                          onClick={toggleStageFullscreen}
+                          className="p-2 text-dim transition-colors hover:text-accent"
+                          style={{ color: isFullscreen ? "var(--ato-text)" : undefined }}
+                          title="Fullscreen (double-click the video)"
+                          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+                        >
+                          {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+                        </button>
+                      }
+                    />
+                  </div>
+                  {/* volume centered under the transport: same placement as
+                      flat/regular so the modes read consistently */}
+                  <div className="relative mt-2 flex w-full justify-center">
+                    <VolumeControl wide />
+                  </div>
                 </div>
               </div>
             </main>
           ) : current ? (
             flat ? (
-              <main className="relative z-10 grid min-h-0 flex-1 place-items-center overflow-y-auto px-6 py-4">
+              <main className="relative z-10 grid min-h-0 flex-1 place-items-center overflow-y-auto px-6 pt-4 pb-10">
                 <div className="flex w-full max-w-md flex-col items-center text-center">
                   {hasVisual ? (
                     <TrackVisual track={current} className="aspect-square w-full max-w-[320px] object-cover" />
@@ -347,15 +578,13 @@ export function NowPlayingOverlay() {
                   )}
 
                   <div className="mt-7 flex items-center justify-center gap-3 text-[10px] tracking-[0.35em]">
-                    <GradeBadge grade={current.grade} />
+                    <GradeBadge grade={current.grade} format={current.format} />
                     {current.sampleRate ? (
-                      <span className="font-mono text-dim">
-                        {current.format.toUpperCase()}
-                        {current.bitDepth ? ` ${current.bitDepth}BIT` : ""} · {(current.sampleRate / 1000).toFixed(1)}kHz
+                      <span className="font-mono leading-[18px] text-dim">
+                        {current.bitDepth ? `${current.bitDepth}BIT · ` : ""}
+                        {(current.sampleRate / 1000).toFixed(1)}kHz
                       </span>
-                    ) : (
-                      <span className="font-mono text-dim">{current.format.toUpperCase()}</span>
-                    )}
+                    ) : null}
                   </div>
 
                   <h1 className="font-display mt-3 w-full break-words text-3xl leading-tight font-bold">
@@ -366,9 +595,13 @@ export function NowPlayingOverlay() {
                   <div className="mt-6 w-full">
                     <SeekBar />
                   </div>
-                  <div className="mt-5">
+                  <div className="mt-6 w-full">
                     <Controls flat />
                   </div>
+                  <div className="mt-2 flex w-full justify-center">
+                    <VolumeControl wide />
+                  </div>
+                  <SmartVolChip />
 
                   {current.lyrics && (
                     <div className="mt-6 w-full">
@@ -402,19 +635,18 @@ export function NowPlayingOverlay() {
               >
                 <CoverStage open={open} />
                 <div className="min-w-0">
-                  <div className="font-mono mb-3 flex items-center gap-3 text-[10px] tracking-[0.35em]">
-                    <span style={{ color: "var(--ato-accent)" }}>TRACK {String(current.trackNo ?? 0).padStart(2, "0")}</span>
-                    <GradeBadge grade={current.grade} />
+                  <div className="font-mono mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] tracking-[0.35em]">
+                    <span className="whitespace-nowrap" style={{ color: "var(--ato-accent)" }}>
+                      TRACK {String(current.trackNo ?? 0).padStart(2, "0")}
+                    </span>
+                    <GradeBadge grade={current.grade} format={current.format} className="shrink-0" />
                     {current.sampleRate ? (
-                      <span className="text-dim">
-                        {current.format.toUpperCase()}
-                        {current.bitDepth ? ` ${current.bitDepth}BIT` : ""} ·{" "}
+                      <span className="whitespace-nowrap text-dim">
+                        {current.bitDepth ? `${current.bitDepth}BIT` : ""} ·{" "}
                         {(current.sampleRate / 1000).toFixed(1)}kHz
                         {current.bitrate ? ` · ${current.bitrate}KBPS` : ""}
                       </span>
-                    ) : (
-                      <span className="text-dim">{current.format.toUpperCase()}</span>
-                    )}
+                    ) : null}
                   </div>
 
                   <h1 className="font-display min-w-0 text-[clamp(28px,4.2vw,56px)] leading-[1.05] font-bold break-words">
@@ -423,17 +655,27 @@ export function NowPlayingOverlay() {
                   <p className="mt-3 text-xl text-dim">
                     <KineticText key={`a-${current.id}`} text={current.artist} />
                   </p>
-                  <p className="font-mono mt-1 text-[11px] tracking-[0.2em] text-dim">
+                  <button
+                    onClick={() =>
+                      useUi.getState().navigate("album", `${current.album}::${current.albumArtist}`, current.source ?? "local")
+                    }
+                    className="font-mono mt-1 text-[11px] tracking-[0.2em] text-dim transition-colors hover:text-accent"
+                    title={`Go to ${current.album}`}
+                  >
                     {current.album}
-                    {current.year ? ` — ${current.year}` : ""}
-                  </p>
+                    {current.year ? ` · ${current.year}` : ""}
+                  </button>
 
                   <div className="mt-8 max-w-xl">
                     <SeekBar />
                   </div>
-                  <div className="mt-6">
+                  <div className="mt-6 w-full">
                     <Controls />
                   </div>
+                  <div className="mt-2 flex w-full justify-center">
+                    <VolumeControl wide />
+                  </div>
+                  <SmartVolChip />
                   {current.lyrics && (
                     <div className="mt-6 max-w-xl">
                       <button
@@ -465,9 +707,6 @@ export function NowPlayingOverlay() {
                       VISUAL ビジュアル {attached?.kind === "gif" ? "// GIF" : attached ? "// CLIP" : "// VIDEO"}
                     </div>
                     <TrackVisual track={current} className="w-full" />
-                    <p className="font-mono mt-2 text-[9px] leading-relaxed tracking-[0.15em] text-dim">
-                      SYNCED TO THE AUDIO — THEATRE MODE IN THE TOP BAR
-                    </p>
                   </div>
                 )}
               </div>
@@ -477,7 +716,7 @@ export function NowPlayingOverlay() {
             <EmptyStage />
           )}
 
-          {/* bottom spectrum strip — hidden in flat mode (nothing should move) */}
+          {/* bottom spectrum strip: hidden in flat mode (nothing should move) */}
           {!flat && (
             <div className="relative z-10 px-10 pb-6">
               <SpectrumBars className="mx-auto max-w-3xl opacity-80" height={44} />

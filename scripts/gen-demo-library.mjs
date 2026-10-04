@@ -1,5 +1,5 @@
 /**
- * Demo library generator — dev fixture, stdlib only.
+ * Demo library generator: dev fixture, stdlib only.
  * Synthesizes small WAV tracks (PCM 16-bit 22.05kHz mono) with ID3v2.3
  * tags (TIT2/TPE1/TALB/TCON/TYER/TRCK + APIC cover) and generates
  * procedural PNG cover art. Output: public/demo-library/

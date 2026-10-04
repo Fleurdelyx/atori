@@ -5,7 +5,7 @@ import { removeServer, saveActiveConnection, switchToServer } from "@/core/cloud
 import { cloudConfigured } from "@/core/cloud/cloudService";
 import { toast } from "@/state/toastStore";
 
-/** Saved server connections — click one to switch where your library lives. */
+/** Saved server connections: click one to switch where your library lives. */
 export function SavedServers() {
   const savedServers = useUi((s) => s.savedServers);
   const activeServerId = useUi((s) => s.activeServerId);
@@ -29,7 +29,7 @@ export function SavedServers() {
                 background: active ? "var(--ato-accent)" : "color-mix(in srgb, var(--ato-text) 6%, transparent)",
                 color: active ? "var(--ato-bg)" : "var(--ato-text-dim)",
               }}
-              title={`${s.url} — ${s.mode}`}
+              title={`${s.url} · ${s.mode}`}
             >
               <span className="font-mono text-[10px] font-bold tracking-[0.15em]">{s.name.toUpperCase()}</span>
               <span className="font-mono ml-2 text-[9px] opacity-60">

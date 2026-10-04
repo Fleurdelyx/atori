@@ -1,5 +1,5 @@
 /**
- * ATRI skin engine — a skin is data, not code paths.
+ * ATRI skin engine: a skin is data, not code paths.
  * Every skin supplies tokens (CSS custom properties), a motion profile,
  * a shader pack (GLSL body for the background stage), particle flavor,
  * post-fx recipe and font stacks. UI components only ever read tokens.
@@ -10,11 +10,11 @@ export type FxQuality = "ultra" | "high" | "medium" | "low";
 export type Grade = "SSR" | "SR" | "R" | "N";
 
 export interface MotionProfile {
-  /** micro interaction (hover, press) — seconds */
+  /** micro interaction (hover, press): seconds */
   fast: number;
-  /** standard screen element transition — seconds */
+  /** standard screen element transition: seconds */
   base: number;
-  /** set-piece moments (cut-ins, wipes) — seconds */
+  /** set-piece moments (cut-ins, wipes): seconds */
   slow: number;
   easeOut: string;
   easeInOut: string;
@@ -26,7 +26,7 @@ export interface MotionProfile {
 }
 
 export interface ShaderPack {
-  /** GLSL: must define `vec3 BG(vec2 p)` — scene background color field */
+  /** GLSL: must define `vec3 BG(vec2 p)`: scene background color field */
   body: string;
   grain: number;
   scanlines: number;

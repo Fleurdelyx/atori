@@ -3,22 +3,38 @@ import { db } from "@/core/library/db";
 import { loadCoverUrl } from "@/core/library/coverCache";
 
 /**
- * PlaylistCover — 2×2 collage from the playlist's first distinct album covers
+ * PlaylistCover: the user's chosen picture when the playlist has one,
+ * otherwise a 2×2 collage from the playlist's first distinct album covers
  * (loaded through the same cache as HoloCover); gradient + initial fallback.
  */
 export function PlaylistCover({
   trackIds,
   title,
+  pic,
   className = "",
 }: {
   trackIds: number[];
   title: string;
+  /** user-chosen playlist picture: wins over the collage */
+  pic?: Blob;
   className?: string;
 }) {
   const [urls, setUrls] = useState<string[]>([]);
+  const [picUrl, setPicUrl] = useState<string | null>(null);
   const key = trackIds.slice(0, 16).join(",");
 
   useEffect(() => {
+    if (!pic) {
+      setPicUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(pic);
+    setPicUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pic]);
+
+  useEffect(() => {
+    if (pic) return; // custom picture replaces the collage
     let alive = true;
     void (async () => {
       const covers: string[] = [];
@@ -36,33 +52,35 @@ export function PlaylistCover({
     return () => {
       alive = false;
     };
-  }, [key]);
+  }, [key, pic]);
 
   const initial = title?.trim()?.[0]?.toUpperCase() ?? "♪";
 
-  if (urls.length === 0) {
+  // fewer than 4 distinct covers: a single full-bleed image reads far better
+  // than tiling the same artwork
+  if (picUrl || urls.length > 0) {
+    const src = picUrl ?? urls[0];
     return (
-      <div
-        className={`flex shrink-0 items-center justify-center ${className}`}
-        style={{
-          borderRadius: "var(--ato-radius)",
-          background:
-            "linear-gradient(135deg, color-mix(in srgb, var(--ato-accent) 22%, transparent), color-mix(in srgb, var(--ato-accent-2) 18%, transparent))",
-        }}
-      >
-        <span className="font-display text-sm font-bold text-dim">{initial}</span>
-      </div>
+      <img
+        src={src}
+        alt={title}
+        className={`shrink-0 object-cover ${className}`}
+        style={{ borderRadius: "var(--ato-radius)" }}
+        draggable={false}
+      />
     );
   }
 
   return (
     <div
-      className={`grid shrink-0 grid-cols-2 overflow-hidden ${className}`}
-      style={{ borderRadius: "var(--ato-radius)" }}
+      className={`flex shrink-0 items-center justify-center ${className}`}
+      style={{
+        borderRadius: "var(--ato-radius)",
+        background:
+          "linear-gradient(135deg, color-mix(in srgb, var(--ato-accent) 22%, transparent), color-mix(in srgb, var(--ato-accent-2) 18%, transparent))",
+      }}
     >
-      {(urls.length < 4 ? [urls[0], urls[0], urls[urls.length - 1], urls[urls.length - 1]] : urls).slice(0, 4).map((u, i) => (
-        <img key={i} src={u} alt="" className="h-full w-full object-cover" draggable={false} />
-      ))}
+      <span className="font-display text-sm font-bold text-dim">{initial}</span>
     </div>
   );
 }

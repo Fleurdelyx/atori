@@ -39,7 +39,7 @@ function scoreOf(query: string, text: string): number {
 }
 
 /**
- * CommandPalette — Ctrl+K quick actions in gacha dress.
+ * CommandPalette: Ctrl+K quick actions in gacha dress.
  * Searches the library + runs app actions (navigate, skin, calm mode).
  */
 export function CommandPalette() {
@@ -76,6 +76,7 @@ export function CommandPalette() {
       { view: "home", label: "Go to Home", jp: "ホーム", icon: <HomeIcon className="h-4 w-4" /> },
       { view: "library", label: "Go to Library", jp: "ライブラリ", icon: <LibraryBig className="h-4 w-4" /> },
       { view: "cloud", label: "Go to Cloud", jp: "クラウド", icon: <Cloud className="h-4 w-4" /> },
+      { view: "catalogue", label: "Go to Catalogue", jp: "カタログ", icon: <Disc3 className="h-4 w-4" /> },
       { view: "settings", label: "Go to Settings", jp: "設定", icon: <Settings2 className="h-4 w-4" /> },
     ];
     for (const n of navs) {
@@ -85,7 +86,7 @@ export function CommandPalette() {
     const acts: PaletteItem[] = [
       { id: "act:playpause", icon: <Play className="h-4 w-4" />, label: "Play / Pause", hint: "SPACE", run: toggle, score: scoreOf(q, "play pause 再生") },
       { id: "act:np", icon: <Disc3 className="h-4 w-4" />, label: "Open Now Playing", hint: "再生中", run: () => setNowPlayingOpen(true), score: scoreOf(q, "open now playing 再生中") },
-      { id: "act:wrapped", icon: <Sparkles className="h-4 w-4" />, label: "ATRI Wrapped — your stats", hint: "年間レポート", run: () => useUi.getState().setWrappedOpen(true), score: scoreOf(q, "atri wrapped stats year review 年間") },
+      { id: "act:wrapped", icon: <Sparkles className="h-4 w-4" />, label: "ATRI Wrapped: your stats", hint: "年間レポート", run: () => useUi.getState().setWrappedOpen(true), score: scoreOf(q, "atri wrapped stats year review 年間") },
       { id: "act:calm", icon: <Moon className="h-4 w-4" />, label: calm ? "Disable Calm Mode" : "Enable Calm Mode", hint: "マモード", run: () => setCalm(!calm), score: scoreOf(q, "calm motion reduced") },
       ...SKINS.map((s) => ({
         id: `skin:${s.id}`,
@@ -107,7 +108,7 @@ export function CommandPalette() {
     ];
     for (const a of acts) if (a.score >= 0) out.push(a);
 
-    // title/artist/album first, tags next, lyrics as fallback — a remembered
+    // title/artist/album first, tags next, lyrics as fallback: a remembered
     // line or genre finds the song
     const t = (q
       ? tracks.filter(
@@ -130,7 +131,7 @@ export function CommandPalette() {
           id: `track:${tr.id}`,
           icon: <Disc3 className="h-4 w-4" />,
           label: tr.title,
-          hint: byTag ? "TAG タグ" : byLyrics ? "歌詞 LYRICS" : `${tr.artist} — ${tr.album}`,
+          hint: byTag ? "TAG タグ" : byLyrics ? "歌詞 LYRICS" : `${tr.artist} · ${tr.album}`,
           run: () => {
             playQueue(tracks, Math.max(0, idx));
             setNowPlayingOpen(true);
@@ -222,7 +223,7 @@ export function CommandPalette() {
               </button>
             ))}
             {items.length === 0 && (
-              <div className="px-5 py-6 text-center text-sm text-dim">No matches — 該当なし</div>
+              <div className="px-5 py-6 text-center text-sm text-dim">No matches · 該当なし</div>
             )}
           </div>
         </motion.div>

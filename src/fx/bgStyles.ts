@@ -1,5 +1,5 @@
 /**
- * BgStyles — selectable background animation bodies, orthogonal to skins.
+ * BgStyles: selectable background animation bodies, orthogonal to skins.
  *
  * Each body is GLSL implementing `vec3 BG(vec2 p)` (p = aspect-corrected
  * centered coords) using the shared PRELUDE helpers (hash/noise/fbm/glow) and
@@ -10,7 +10,7 @@
  *  - motion is uTime-driven → CALM MODE freezes every style automatically
  *  - every style is band-reactive: elements own slices of uBands (bass → treble)
  *    so the kick, vocals and highs each have a visual home
- *  - audio only ever modulates amplitude/brightness — sweep speeds stay constant
+ *  - audio only ever modulates amplitude/brightness: sweep speeds stay constant
  *  - `uQuality` branches drop expensive detail on lower settings
  */
 
@@ -27,7 +27,7 @@ export const BG_STYLES: BgStyleDef[] = [
     id: "starfield",
     name: "STARFIELD",
     nameJp: "星海",
-    blurb: "band-owned constellations — every star pulses with its own slice",
+    blurb: "band-owned constellations: every star pulses with its own slice",
     body: /* glsl */ `
 vec3 BG(vec2 p) {
   float t = uTime;
@@ -42,20 +42,21 @@ vec3 BG(vec2 p) {
   for (int layer = 0; layer < 3; layer++) {
     float fl = float(layer) + 1.0;
     float layerBand = texture2D(uBands, vec2(0.18 + fl * 0.22, 0.5)).r;
+    // positions are time-driven ONLY: audio on the grid scale made stars
+    // jump back and forth between cells with every beat
     vec2 sp = p * (3.0 + fl * 2.6);
     sp.y += t * (0.05 + 0.04 * fl);
-    sp *= 1.0 + warp * 0.05 * fl;
     vec2 cell = floor(sp);
     vec2 f = fract(sp) - 0.5;
     float rnd = hash(cell + fl * 17.0);
     float star = step(0.962 - fl * 0.004, rnd);
     vec2 off = (vec2(hash(cell + 3.1), hash(cell + 7.7)) - 0.5) * 0.6;
-    float d = length(f - off - dir * warp * 0.22 * rad);
-    // every star owns a stable random band — the music lights them individually
+    float d = length(f - off);
+    // every star owns a stable random band: the music lights them individually
     float sband = texture2D(uBands, vec2(fract(rnd * 9.0), 0.5)).r;
     float tw = 0.55 + 0.45 * sin(t * (1.4 + rnd * 2.2) + rnd * 40.0);
-    col += star * tw * (0.35 + sband * 1.5 * react + layerBand * 0.35 * react)
-      * smoothstep(0.16 + warp * 0.12, 0.0, d)
+    col += star * tw * (0.35 + sband * 1.5 * react + layerBand * 0.35 * react + warp * 0.22)
+      * smoothstep(0.16, 0.0, d)
       * mix(vec3(1.0), mix(uA, uB, rnd), 0.6) * (0.55 / fl);
   }
 
@@ -70,7 +71,7 @@ vec3 BG(vec2 p) {
     id: "digital-rain",
     name: "NEON GRID",
     nameJp: "ネオングリッド",
-    blurb: "disco floor with a front-row spectrum — kick left, highs right",
+    blurb: "disco floor with a front-row spectrum: kick left, highs right",
     body: /* glsl */ `
 vec3 BG(vec2 p) {
   float t = uTime;
@@ -95,7 +96,7 @@ vec3 BG(vec2 p) {
   float band = texture2D(uBands, vec2((id.x + 0.5) / cells.x, 0.5)).r;
   float eqWeight = mix(1.0, 0.2, clamp(id.y / cells.y, 0.0, 1.0));
 
-  // diagonal wave sweeping at constant speed — the wave must never change
+  // diagonal wave sweeping at constant speed: the wave must never change
   // velocity (that reads as rubber-banding); the beat enters via brightness
   float phase = fract((id.x + id.y * 0.7) / 40.0 + t * 0.35 + rnd * 0.15);
   float groove = smoothstep(0.0, 0.4, phase) * smoothstep(1.0, 0.6, phase);
@@ -120,16 +121,12 @@ vec3 BG(vec2 p) {
     id: "aurora",
     name: "AURORA",
     nameJp: "極光",
-    blurb: "four band-owned curtains — the kick swells low, highs shimmer above",
+    blurb: "four band-owned curtains: the kick swells low, highs shimmer above",
     body: /* glsl */ `
 vec3 BG(vec2 p) {
   float t = uTime * 0.05;
   float react = 1.0 - uCalm;
   vec3 col = mix(uC * 1.55, uC * 0.8, smoothstep(-0.7, 0.9, p.y));
-
-  // star dust; treble lifts the sparkle
-  float st = hash(floor(p * 40.0));
-  col += step(0.995, st) * (0.25 + uTreble * 0.35 * react) * mix(vec3(1.0), uB, 0.4);
 
   for (int i = 0; i < 4; i++) {
     float fi = float(i);
@@ -156,14 +153,14 @@ vec3 BG(vec2 p) {
     id: "pulse",
     name: "BEAT SHARDS",
     nameJp: "ビートシャード",
-    blurb: "32-band shard equalizer — kick, vocals and highs own their shards",
+    blurb: "32-band shard equalizer: kick, vocals and highs own their shards",
     body: /* glsl */ `
 vec3 BG(vec2 p) {
   float t = uTime;
   float react = 1.0 - uCalm;
   vec3 col = mix(uC * 1.45, uC * 0.75, smoothstep(-0.7, 0.9, p.y));
 
-  // slanted shard stage — parallelogram bars echoing the UI's clip-slash shapes
+  // slanted shard stage: parallelogram bars echoing the UI's clip-slash shapes
   float slant = 0.38;
   float pitch = 0.075;
   float gap = 0.016;
@@ -208,14 +205,14 @@ vec3 BG(vec2 p) {
     id: "halftone",
     name: "HALFTONE PULSE",
     nameJp: "ハーフトーンパルス",
-    blurb: "print-grid dots — each column breathes with its own band",
+    blurb: "print-grid dots: each column breathes with its own band",
     body: /* glsl */ `
 vec3 BG(vec2 p) {
   float t = uTime;
   float react = 1.0 - uCalm;
   vec3 col = mix(uC * 1.4, uC * 0.7, smoothstep(-0.8, 0.9, p.y));
 
-  // slanted halftone grid — each column owns one FFT slice
+  // slanted halftone grid: each column owns one FFT slice
   float slant = 0.3;
   vec2 q = vec2(p.x + p.y * slant, p.y);
   vec2 cells = vec2(34.0, 20.0);
@@ -226,7 +223,7 @@ vec3 BG(vec2 p) {
   float cu = (id.x + 0.5) / cells.x;
   float band = texture2D(uBands, vec2(cu, 0.5)).r;
 
-  // dots breathe slowly for idle life; bands lift their size — never speed
+  // dots breathe slowly for idle life; bands lift their size: never speed
   float rnd = hash(id);
   float breathe = 0.012 * sin(t * (0.7 + rnd) + rnd * 6.2831853);
   float r = 0.045 + band * (0.16 + rnd * 0.08) * react + breathe;
@@ -245,14 +242,14 @@ vec3 BG(vec2 p) {
     id: "stream",
     name: "DATA STREAM",
     nameJp: "データストリーム",
-    blurb: "slanted falling streams — columns light up bass to treble",
+    blurb: "slanted falling streams: columns light up bass to treble",
     body: /* glsl */ `
 vec3 BG(vec2 p) {
   float t = uTime;
   float react = 1.0 - uCalm;
   vec3 col = mix(uC * 1.3, uC * 0.7, smoothstep(-0.8, 0.9, p.y));
 
-  // slanted falling streams — each column owns one FFT slice
+  // slanted falling streams: each column owns one FFT slice
   float slant = 0.12;
   float cols = 42.0;
   float xs = (p.x + p.y * slant) * 0.5 + 0.5;
@@ -280,7 +277,7 @@ vec3 BG(vec2 p) {
     id: "weave",
     name: "CHROMA WEAVE",
     nameJp: "クロマウィーブ",
-    blurb: "woven ribbon families — bass wide, mids steady, treble quick",
+    blurb: "woven ribbon families: bass wide, mids steady, treble quick",
     body: /* glsl */ `
 vec3 BG(vec2 p) {
   float t = uTime;
@@ -312,14 +309,14 @@ vec3 BG(vec2 p) {
     id: "slabs",
     name: "WAVE SLABS",
     nameJp: "ウェーブスラブ",
-    blurb: "strata slabs — eight chunky spectrum bands with glowing edges",
+    blurb: "strata slabs: eight chunky spectrum bands with glowing edges",
     body: /* glsl */ `
 vec3 BG(vec2 p) {
   float t = uTime;
   float react = 1.0 - uCalm;
   vec3 col = mix(uC * 1.3, uC * 0.7, smoothstep(-0.9, 0.9, p.y));
 
-  // thick strata — 8 chunks of the spectrum, kick at the bottom
+  // thick strata: 8 chunks of the spectrum, kick at the bottom
   float n = 8.0;
   float slant = 0.06;
   float xs = p.x + p.y * slant;

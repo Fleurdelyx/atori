@@ -9,14 +9,14 @@ import {
   type ImportProgress,
   type ImportResult,
 } from "@/core/library/importService";
-import { inTauriShell, tauriImportFolder, tauriRescan, tauriRootCount } from "@/core/library/shellIngest";
+import { inTauriShell, tauriImportFolder, tauriImportPaths, tauriRescan, tauriRootCount } from "@/core/library/shellIngest";
 import { toast } from "@/state/toastStore";
 
 function announce(r: ImportResult) {
   const bits = [`${r.added} added`, `${r.updated} updated`];
   if (r.skipped) bits.push(`${r.skipped} skipped`);
   if (r.failed) bits.push(`${r.failed} failed`);
-  toast(`Import complete — ${bits.join(" · ")}`, r.failed ? "error" : "success", "取り込み完了");
+  toast(`Import complete: ${bits.join(" · ")}`, r.failed ? "error" : "success", "取り込み完了");
 }
 
 /** Shared import UX state for Home/Library screens. */
@@ -36,7 +36,7 @@ export function useImporter() {
       return true;
     }
     if (!supportsDirectoryPicker()) {
-      toast("Folder picker not supported here — drop files onto the window instead", "info", "取り込み");
+      toast("Folder picker not supported here: drop files onto the window instead", "info", "取り込み");
       return false;
     }
     const dir = await pickDirectory();
@@ -54,7 +54,7 @@ export function useImporter() {
     if (inTauriShell()) {
       const roots = await tauriRootCount();
       if (roots === 0) {
-        toast("No library folders saved yet — import one first", "info", "再スキャン");
+        toast("No library folders saved yet: import one first", "info", "再スキャン");
         return false;
       }
       const r = await tauriRescan(setProgress);
@@ -67,11 +67,11 @@ export function useImporter() {
     }
     const { result: r, roots, needsPermission } = await rescanLibrary(setProgress);
     if (roots === 0) {
-      toast("No library folders saved yet — import one first", "info", "再スキャン");
+      toast("No library folders saved yet: import one first", "info", "再スキャン");
       return false;
     }
     if (needsPermission) {
-      toast("Folder access expired — click RECONNECT to re-grant", "error", "再スキャン");
+      toast("Folder access expired: click RECONNECT to re-grant", "error", "再スキャン");
       return false;
     }
     if (r) {
@@ -86,7 +86,26 @@ export function useImporter() {
     setResult(null);
     const r = await importFromDataTransfer(dt, setProgress);
     setResult(r);
-    announce(r);
+    if (r.added + r.updated + r.skipped + r.failed === 0) {
+      toast("No supported audio/video files in that drop", "info", "取り込み");
+    } else {
+      announce(r);
+    }
+    setProgress(null);
+  }, []);
+
+  /** Native-shell drop: Tauri hands us absolute paths (files or folders). */
+  const importTauriDrop = useCallback(async (paths: string[]) => {
+    setResult(null);
+    const r = await tauriImportPaths(paths, setProgress);
+    if (r) {
+      setResult(r);
+      if (r.added + r.updated + r.skipped + r.failed === 0) {
+        toast("No supported audio/video files in that drop", "info", "取り込み");
+      } else {
+        announce(r);
+      }
+    }
     setProgress(null);
   }, []);
 
@@ -98,5 +117,14 @@ export function useImporter() {
     setProgress(null);
   }, []);
 
-  return { progress, result, importDir, importDrop, importList, rescan, supportsPicker: supportsDirectoryPicker() };
+  return {
+    progress,
+    result,
+    importDir,
+    importDrop,
+    importTauriDrop,
+    importList,
+    rescan,
+    supportsPicker: supportsDirectoryPicker(),
+  };
 }

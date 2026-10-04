@@ -2,11 +2,12 @@ import { useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { TrackMeta } from "@/core/library/types";
 import { TrackRow } from "@/ui/components";
+import { ScrollFade } from "@/ui/kit/ScrollFade";
 
 const ROW_HEIGHT = 48;
 
 /**
- * Virtualized track list (TanStack Virtual) — smooth with 10k+ rows.
+ * Virtualized track list (TanStack Virtual): smooth with 10k+ rows.
  * Owns its scroll container; give it a bounded height via className.
  */
 export function VirtualTrackList({
@@ -23,7 +24,7 @@ export function VirtualTrackList({
   onRemove?: (track: TrackMeta) => void;
   /** track ids whose current search match came from the lyrics */
   lyricsHits?: Set<number>;
-  /** batch-select mode — forwarded to every row */
+  /** batch-select mode: forwarded to every row */
   selection?: { selected: Set<number>; onToggle: (id: number) => void };
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
@@ -35,7 +36,7 @@ export function VirtualTrackList({
   });
 
   return (
-    <div ref={parentRef} className={`overflow-y-auto ${className}`}>
+    <ScrollFade ref={parentRef} className={`overflow-y-auto ${className}`}>
       <div style={{ height: virt.getTotalSize(), position: "relative" }}>
         {virt.getVirtualItems().map((vi) => (
           <div
@@ -61,6 +62,6 @@ export function VirtualTrackList({
           </div>
         ))}
       </div>
-    </div>
+    </ScrollFade>
   );
 }
