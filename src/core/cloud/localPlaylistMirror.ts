@@ -34,6 +34,12 @@ function installOrigin(): string {
   return o;
 }
 
+/** this install's mirror namespace: UI hides a device's own mirrors (the
+ *  LOCAL section already shows those playlists) and shows foreign ones */
+export function getInstallOrigin(): string {
+  return installOrigin();
+}
+
 function sameSong(a: TrackMeta, b: TrackMeta): boolean {
   const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
   return (

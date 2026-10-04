@@ -5,6 +5,8 @@ import { LogoMark } from "@/ui/kit/LogoMark";
 import { PlaylistCover } from "@/ui/kit/PlaylistCover";
 import { Heart } from "lucide-react";
 import { useLikedTracks } from "@/core/cloud/likedTracks";
+import { useCloudPlaylists } from "@/core/cloud/playlistStore";
+import { isLocalMirror, getInstallOrigin } from "@/core/cloud/localPlaylistMirror";
 import { useCataloguePlaylists } from "@/core/cloud/cataloguePlaylistStore";
 import { CataloguePlaylistCover } from "@/ui/kit/CataloguePlaylistCover";
 import { showContextMenu } from "@/state/contextMenuStore";
@@ -202,6 +204,17 @@ function PinnedPlaylists({ collapsed }: { collapsed: boolean }) {
   const openLiked = useUi((s) => s.openLiked);
   const likedFocus = useUi((s) => s.likedFocus);
   const likedCount = useLikedTracks().length;
+  // cloud playlists ride in the same PLAYLISTS section so every signed-in
+  // device's rail looks the same; a device skips its OWN mirrors (the local
+  // rows above already show those playlists) and shows everyone else's
+  const cloudPls = useCloudPlaylists((s) => s.playlists).filter(
+    (p) => !p.id.startsWith(`lp_${getInstallOrigin()}-`),
+  );
+  const cloudFocus = useUi((s) => s.cloudPlaylistFocus);
+  const openCloudPl = (id: string) => {
+    useUi.getState().navigate("library");
+    useUi.getState().setCloudPlaylistFocus({ id, n: Date.now() });
+  };
   const savedCatIds = useUi((s) => s.savedCataloguePls);
   const savedCatalogueFocus = useUi((s) => s.savedCatalogueFocus);
   const catPlaylists = useCataloguePlaylists((s) => s.playlists);
@@ -305,6 +318,21 @@ function PinnedPlaylists({ collapsed }: { collapsed: boolean }) {
             </motion.div>
           );
         })}
+        {cloudPls.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => openCloudPl(p.id)}
+            title={p.name}
+            aria-label={p.name}
+            className="flex w-full justify-center py-1"
+            style={{
+              background: libraryActive && cloudFocus?.id === p.id ? "color-mix(in srgb, var(--ato-accent) 12%, transparent)" : "transparent",
+              borderRadius: "var(--ato-radius)",
+            }}
+          >
+            <CataloguePlaylistCover tracks={[]} title={p.name} className="h-9 w-9" />
+          </button>
+        ))}
       </motion.div>
     );
   }
@@ -430,6 +458,39 @@ function PinnedPlaylists({ collapsed }: { collapsed: boolean }) {
                 </span>
               </button>
             </motion.div>
+          );
+        })}
+        {cloudPls.map((p) => {
+          const active = libraryActive && cloudFocus?.id === p.id;
+          return (
+            <button
+              key={p.id}
+              onClick={() => openCloudPl(p.id)}
+              title={p.name}
+              className="group flex w-full items-center gap-3 px-2 py-2 text-left transition-colors"
+              style={{
+                background: active ? "color-mix(in srgb, var(--ato-accent) 12%, transparent)" : "transparent",
+                borderRadius: "var(--ato-radius)",
+              }}
+            >
+              <CataloguePlaylistCover tracks={[]} title={p.name} className="h-9 w-9" />
+              <span className="min-w-0 flex-1">
+                <span
+                  className="block truncate text-[12.5px] font-medium"
+                  style={{ color: active ? "var(--ato-accent)" : "var(--ato-text-dim)" }}
+                >
+                  {p.name}
+                  {isLocalMirror(p) && (
+                    <span className="font-mono ml-2 align-middle text-[8px] tracking-[0.25em]" style={{ color: "var(--ato-accent-2)" }}>
+                      SYNC
+                    </span>
+                  )}
+                </span>
+                <span className="font-mono block truncate text-[9px] tracking-[0.15em] text-dim opacity-70">
+                  {p.trackKeys.length} TRACKS · <span style={{ color: "var(--ato-gold)" }}>CLOUD</span>
+                </span>
+              </span>
+            </button>
           );
         })}
       </div>

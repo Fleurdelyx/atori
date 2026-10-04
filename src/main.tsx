@@ -8,6 +8,7 @@ import { engine } from "@/core/audio/AudioEngine";
 import { usePlayback, saveLastTrack, setCloudResumePush, readQueueState, saveQueueNow } from "@/core/audio/playbackStore";
 import { fetchResume, putResume, cloudConfigured, type ResumeState } from "@/core/cloud/cloudService";
 import { useCloud } from "@/core/cloud/cloudStore";
+import { useCloudPlaylists } from "@/core/cloud/playlistStore";
 import { useAuth } from "@/core/auth/authStore";
 import { checkForUpdates } from "@/core/shell/updater";
 import { useUi } from "@/state/uiStore";
@@ -36,7 +37,13 @@ if (cloudConfigured()) {
   if (a.sessionToken) {
     void import("@/core/auth/authService").then(({ me }) =>
       me(a.serverUrl, a.sessionToken!).then((u) => {
-        if (u) useAuth.getState().setSession(a.sessionToken, u);
+        if (u) {
+          useAuth.getState().setSession(a.sessionToken, u);
+          // account data the shell surfaces (rail playlists, liked count, stats)
+          void useCloudPlaylists.getState().pull();
+          void import("@/core/cloud/favoritesStore").then((m) => m.useFavorites.getState().pull());
+          void import("@/core/cloud/playStats").then((m) => m.usePlayStats.getState().pull());
+        }
       }),
     );
   }
