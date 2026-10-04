@@ -212,6 +212,11 @@ function Controls({ flat = false, lead, trail }: { flat?: boolean; lead?: ReactN
   const toggleLiked = useFavorites((s) => s.toggle);
 
   const btn = "p-2.5 text-dim transition-colors hover:text-accent";
+  // click feedback: the icon remounts and pops so the press reads instantly
+  // (no hovering away to check whether the toggle color changed)
+  const [shufflePops, setShufflePops] = useState(0);
+  const [repeatPops, setRepeatPops] = useState(0);
+  const pop = { initial: { scale: 0.55, rotate: -25 }, animate: { scale: 1, rotate: 0 }, transition: { type: "spring" as const, stiffness: 520, damping: 17 } };
   return (
     // Spotify's 3-zone transport: like+shuffle far left, prev/play/next dead
     // center, repeat+queue far right: the play button is ALWAYS centered
@@ -237,8 +242,18 @@ function Controls({ flat = false, lead, trail }: { flat?: boolean; lead?: ReactN
             <Heart className="h-5 w-5" fill={liked ? "var(--ato-accent)" : "none"} />
           </button>
         )}
-        <button aria-label="Shuffle" className={btn} onClick={toggleShuffle} style={{ color: shuffle ? "var(--ato-accent)" : undefined }}>
-          <Shuffle className="h-5 w-5" />
+        <button
+          aria-label="Shuffle"
+          className={btn}
+          onClick={() => {
+            setShufflePops((n) => n + 1);
+            toggleShuffle();
+          }}
+          style={{ color: shuffle ? "var(--ato-accent)" : undefined }}
+        >
+          <motion.span key={shufflePops} {...pop} className="block">
+            <Shuffle className="h-5 w-5" />
+          </motion.span>
         </button>
       </div>
       <div className="flex items-center gap-3">
@@ -284,8 +299,18 @@ function Controls({ flat = false, lead, trail }: { flat?: boolean; lead?: ReactN
       </button>
       </div>
       <div className="flex items-center gap-3 justify-self-end">
-        <button aria-label={`Repeat ${repeat}`} className={btn} onClick={cycleRepeat} style={{ color: repeat !== "off" ? "var(--ato-accent)" : undefined }}>
-          {repeat === "one" ? <RepeatOneIcon className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
+        <button
+          aria-label={`Repeat ${repeat}`}
+          className={btn}
+          onClick={() => {
+            setRepeatPops((n) => n + 1);
+            cycleRepeat();
+          }}
+          style={{ color: repeat !== "off" ? "var(--ato-accent)" : undefined }}
+        >
+          <motion.span key={`${repeatPops}-${repeat}`} {...pop} className="block">
+            {repeat === "one" ? <RepeatOneIcon className="h-5 w-5" /> : <Repeat className="h-5 w-5" />}
+          </motion.span>
         </button>
         <button aria-label="Queue" className={btn} onClick={() => useUi.getState().setQueueOpen(true)}>
           <ListMusic className="h-5 w-5" />

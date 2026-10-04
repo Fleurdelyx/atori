@@ -61,3 +61,28 @@ export async function putPlaylists(playlists: CloudPlaylist[]): Promise<void> {
   if (res.status === 401) throw new CloudAuthError();
   if (!res.ok) throw new Error(`playlists write failed: HTTP ${res.status}`);
 }
+
+/** per-user listening log: play events keyed by track path so every device
+ *  merges into the same stats view */
+export interface PlayStatEntry {
+  path: string;
+  at: number;
+}
+
+export async function fetchPlayStats(): Promise<PlayStatEntry[]> {
+  const res = await authedFetch("/api/library/stats");
+  if (res.status === 401) throw new CloudAuthError();
+  if (!res.ok) throw new Error(`stats fetch failed: HTTP ${res.status}`);
+  const data = (await res.json()) as { plays?: PlayStatEntry[] };
+  return Array.isArray(data.plays) ? data.plays : [];
+}
+
+export async function putPlayStats(plays: PlayStatEntry[]): Promise<void> {
+  const res = await authedFetch("/api/library/stats", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plays }),
+  });
+  if (res.status === 401) throw new CloudAuthError();
+  if (!res.ok) throw new Error(`stats write failed: HTTP ${res.status}`);
+}

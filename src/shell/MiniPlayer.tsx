@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
 import {
   ChevronsDown,
   ListMusic,
@@ -177,6 +178,10 @@ export function MiniPlayer() {
   const prev = usePlayback((s) => s.prev);
   const cycleRepeat = usePlayback((s) => s.cycleRepeat);
   const toggleShuffle = usePlayback((s) => s.toggleShuffle);
+  // click feedback: the icon pops on press so the toggle reads instantly
+  const [shufflePops, setShufflePops] = useState(0);
+  const [repeatPops, setRepeatPops] = useState(0);
+  const pop = { initial: { scale: 0.55, rotate: -25 }, animate: { scale: 1, rotate: 0 }, transition: { type: "spring" as const, stiffness: 520, damping: 17 } };
   const setNowPlayingOpen = useUi((s) => s.setNowPlayingOpen);
   const setQueueOpen = useUi((s) => s.setQueueOpen);
   const [lyricsOpen, setLyricsOpen] = useState(false);
@@ -263,12 +268,17 @@ export function MiniPlayer() {
         {/* transport */}
         <div className="mx-auto flex items-center gap-2">
           <button
-            onClick={toggleShuffle}
+            onClick={() => {
+              setShufflePops((n) => n + 1);
+              toggleShuffle();
+            }}
             className="p-2 text-dim hover:text-accent"
             style={{ color: shuffle ? "var(--ato-accent)" : undefined }}
             title="Shuffle"
           >
-            <Shuffle className="h-4 w-4" />
+            <motion.span key={shufflePops} {...pop} className="block">
+              <Shuffle className="h-4 w-4" />
+            </motion.span>
           </button>
           <button onClick={prev} className="p-2 hover:text-accent" title="Previous">
             <SkipBack className="h-5 w-5" />
@@ -291,12 +301,17 @@ export function MiniPlayer() {
             <SkipForward className="h-5 w-5" />
           </button>
           <button
-            onClick={cycleRepeat}
+            onClick={() => {
+              setRepeatPops((n) => n + 1);
+              cycleRepeat();
+            }}
             className="p-2 text-dim hover:text-accent"
             style={{ color: repeat !== "off" ? "var(--ato-accent)" : undefined }}
             title={`Repeat: ${repeat}`}
           >
-            {repeat === "one" ? <RepeatOneIcon className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
+            <motion.span key={`${repeatPops}-${repeat}`} {...pop} className="block">
+              {repeat === "one" ? <RepeatOneIcon className="h-4 w-4" /> : <Repeat className="h-4 w-4" />}
+            </motion.span>
           </button>
         </div>
 

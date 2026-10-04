@@ -17,6 +17,7 @@ import { useCloud } from "@/core/cloud/cloudStore";
 import { cloudConfigured, cloudMode, isCatalogueTrack, manifestToTracks, resolveSourceFile, uploadTracks } from "@/core/cloud/cloudService";
 import { useCatalogue } from "@/core/cloud/catalogueStore";
 import { useCloudPlaylists } from "@/core/cloud/playlistStore";
+import { isLocalMirror } from "@/core/cloud/localPlaylistMirror";
 import { AlbumCard, DirectoryInput, TrackRow } from "@/ui/components";
 import { VirtualTrackList } from "@/ui/kit/VirtualTrackList";
 import { AddUrlPanel } from "@/ui/kit/AddUrlPanel";
@@ -740,24 +741,33 @@ function CloudPlaylistsPane() {
             >
               <ListMusic className="h-3.5 w-3.5 shrink-0 text-dim" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium">{pl.name}</span>
+                <span className="block truncate text-[13px] font-medium">
+                  {pl.name}
+                  {isLocalMirror(pl) && (
+                    <span className="font-mono ml-2 align-middle text-[8px] tracking-[0.25em]" style={{ color: "var(--ato-accent-2)" }}>
+                      SYNC
+                    </span>
+                  )}
+                </span>
                 <span className="font-mono block text-[9px] text-dim">{pl.trackKeys.length} TRACKS</span>
               </span>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void (async () => {
-                    if (!(await confirm({ title: `DELETE ${pl.name}?`, danger: true }))) return;
-                    plRemove(pl.id);
-                    if (selectedId === pl.id) setSelectedId(null);
-                    toast(`Deleted ${pl.name}`, "info", "削除済み");
-                  })();
-                }}
-                className="p-1 text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent"
-                aria-label={`Delete ${pl.name}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {!isLocalMirror(pl) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void (async () => {
+                      if (!(await confirm({ title: `DELETE ${pl.name}?`, danger: true }))) return;
+                      plRemove(pl.id);
+                      if (selectedId === pl.id) setSelectedId(null);
+                      toast(`Deleted ${pl.name}`, "info", "削除済み");
+                    })();
+                  }}
+                  className="p-1 text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent"
+                  aria-label={`Delete ${pl.name}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
           ))}
           {playlists.length === 0 && (

@@ -21,6 +21,7 @@ import { showContextMenu, type ContextMenuItem } from "@/state/contextMenuStore"
 import { confirm } from "@/state/confirmStore";
 import { cacheTrack } from "@/core/cloud/cloudService";
 import { useCloudPlaylists } from "@/core/cloud/playlistStore";
+import { isLocalMirror } from "@/core/cloud/localPlaylistMirror";
 import { useFavorites } from "@/core/cloud/favoritesStore";
 import { trackHasTag, type TagStat } from "@/core/library/useLibrary";
 import type { TrackMeta } from "@/core/library/types";
@@ -71,7 +72,7 @@ export async function showTrackMenu(e: MouseEventLike, track: TrackMeta, context
         : []
       : track.source === "cloud"
         ? [
-            ...useCloudPlaylists.getState().playlists.map((pl) => ({
+            ...useCloudPlaylists.getState().playlists.filter((pl) => !isLocalMirror(pl)).map((pl) => ({
               label: `＋ ${pl.name}`,
               jp: "追加",
               run: () => {
@@ -350,7 +351,7 @@ export function showAlbumMenu(e: MouseEventLike, album: AlbumInfo, source: Album
   if (source === "cloud") {
     items.push({ divider: true, label: "" });
     items.push(
-      ...useCloudPlaylists.getState().playlists.map((pl) => ({
+      ...useCloudPlaylists.getState().playlists.filter((pl) => !isLocalMirror(pl)).map((pl) => ({
         label: `＋ ${pl.name}`,
         jp: "追加",
         run: () => {

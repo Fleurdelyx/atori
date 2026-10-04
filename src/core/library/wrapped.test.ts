@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeWrapped } from "./wrapped";
+import { computeWrapped, type WrappedPlay } from "./wrapped";
 import type { TrackMeta } from "./types";
 
 function track(id: number, partial: Partial<TrackMeta> = {}): TrackMeta {
@@ -31,6 +31,10 @@ function track(id: number, partial: Partial<TrackMeta> = {}): TrackMeta {
   };
 }
 
+function play(path: string | null, at: number): WrappedPlay {
+  return { path, at };
+}
+
 describe("computeWrapped", () => {
   it("aggregates minutes, tops, and unique tracks from the play log", () => {
     const tracks = [
@@ -39,11 +43,11 @@ describe("computeWrapped", () => {
       track(3, { title: "Song Three", artist: "Beta", album: "AL2", genre: ["Pop"] }),
     ];
     const plays = [
-      { trackId: 1, at: 1 },
-      { trackId: 1, at: 2 },
-      { trackId: 1, at: 3 },
-      { trackId: 2, at: 4 },
-      { trackId: 3, at: 5 },
+      play("p1", 1),
+      play("p1", 2),
+      play("p1", 3),
+      play("p2", 4),
+      play("p3", 5),
     ];
     const w = computeWrapped(plays, tracks);
     expect(w.plays).toBe(5);
@@ -53,6 +57,12 @@ describe("computeWrapped", () => {
     expect(w.topArtists[0]).toEqual({ name: "Alpha", plays: 4 });
     expect(w.topTags[0]).toEqual({ name: "Rock", plays: 4 });
     expect(w.topAlbums[0].name).toBe("AL1");
+  });
+
+  it("ignores plays whose track no longer resolves", () => {
+    const w = computeWrapped([play("gone", 1), play(null, 2), play("p1", 3)], [track(1)]);
+    expect(w.plays).toBe(1);
+    expect(w.uniqueTracks).toBe(1);
   });
 
   it("handles an empty log", () => {

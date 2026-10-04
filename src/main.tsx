@@ -17,6 +17,7 @@ import type { TrackMeta } from "@/core/library/types";
 wireEngine();
 wireCloud();
 primePlaylistCache();
+void import("@/core/cloud/localPlaylistMirror").then((m) => m.installLocalPlaylistMirror());
 
 // Cloud-first library: pull the manifest at boot so Home/Library/search show
 // the streamed library without visiting the Cloud screen first. The shared

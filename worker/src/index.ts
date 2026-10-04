@@ -275,6 +275,30 @@ app.use("/api/library/*", sessionAuth);
 app.use("/api/favorites", sessionAuth);
 app.use("/api/playlists", sessionAuth);
 
+/* ---------- listening stats: per-user play log (path + timestamp) ---------- */
+
+app.get("/api/library/stats", async (c) => {
+  const obj = await c.env.LIBRARY.get(`u/${c.get("user").id}/stats.json`);
+  if (!obj) return c.json({ plays: [] });
+  return new Response(obj.body, { headers: { "Content-Type": "application/json" } });
+});
+
+app.put("/api/library/stats", async (c) => {
+  const body = await c.req.json<{ plays?: unknown }>().catch(() => null);
+  if (!body || !Array.isArray(body.plays)) return c.json({ error: "Body must be { plays: [{ path, at }] }" }, 400);
+  const plays = (body.plays as unknown[])
+    .slice(0, 5000)
+    .filter(
+      (p): p is { path: string; at: number } =>
+        !!p &&
+        typeof (p as { path?: unknown }).path === "string" &&
+        (p as { path: string }).path.length > 0 &&
+        typeof (p as { at?: unknown }).at === "number",
+    );
+  await c.env.LIBRARY.put(`u/${c.get("user").id}/stats.json`, JSON.stringify({ plays, updatedAt: Date.now() }));
+  return c.json({ ok: true, count: plays.length });
+});
+
 app.get("/api/library/manifest", async (c) => {
   const key = `u/${c.get("user").id}/manifest.json`;
   const obj = await c.env.LIBRARY.get(key);

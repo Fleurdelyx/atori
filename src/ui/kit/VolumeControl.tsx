@@ -84,7 +84,7 @@ export function VolumeControl({ className = "", wide = false }: { className?: st
         value={volume}
         onChange={(e) => setVolume(parseFloat(e.target.value))}
         className={`ato-slider fade-thumb cursor-pointer ${wide ? "w-44" : "w-24"}`}
-        style={{ "--fill": `${(volume * 100).toFixed(1)}%` } as React.CSSProperties}
+        style={{ "--p": `${volume.toFixed(2)}` } as React.CSSProperties}
       />
     </div>
   );

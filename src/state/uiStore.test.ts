@@ -24,7 +24,9 @@ describe("uiStore queueStyle", () => {
 });
 
 describe("uiStore view history (back/forward)", () => {
-  it("navigating pushes history and truncates the forward stack", () => {
+const flush = () => new Promise((r) => setTimeout(r, 10));
+
+  it("navigating pushes history and truncates the forward stack", async () => {
     const s = useUi.getState();
     // start from a known point
     s.navigate("home");
@@ -33,16 +35,16 @@ describe("uiStore view history (back/forward)", () => {
     expect(useUi.getState().view).toBe("settings");
     expect(useUi.getState().viewHistoryIndex).toBe(useUi.getState().viewHistory.length - 1);
     // back twice → home
-    useUi.getState().navigateBack();
-    useUi.getState().navigateBack();
+    useUi.getState().navigateBack(); await flush();
+    useUi.getState().navigateBack(); await flush();
     expect(useUi.getState().view).toBe("home");
     // forward → library
-    useUi.getState().navigateForward();
+    useUi.getState().navigateForward(); await flush();
     expect(useUi.getState().view).toBe("library");
     // a fresh navigation from here drops the forward entry (settings)
     useUi.getState().navigate("cloud");
     expect(useUi.getState().view).toBe("cloud");
-    useUi.getState().navigateForward();
+    useUi.getState().navigateForward(); await flush();
     expect(useUi.getState().view).toBe("cloud"); // nothing ahead anymore
   });
 
@@ -55,10 +57,10 @@ describe("uiStore view history (back/forward)", () => {
     useUi.getState().navigate("home"); // leave the store on home for other tests
   });
 
-  it("album navigation carries its key in history", () => {
+  it("album navigation carries its key in history", async () => {
     useUi.getState().navigate("album", "Some Album::Some Artist", "cloud");
     useUi.getState().navigate("home");
-    useUi.getState().navigateBack();
+    useUi.getState().navigateBack(); await flush();
     const s = useUi.getState();
     expect(s.view).toBe("album");
     expect(s.albumKey).toBe("Some Album::Some Artist");
@@ -66,26 +68,29 @@ describe("uiStore view history (back/forward)", () => {
     useUi.getState().navigate("home");
   });
 
-  it("back/forward are no-ops at the stack ends", () => {
+  it("back/forward are no-ops at the stack ends", async () => {
     useUi.getState().navigate("home");
     useUi.getState().navigate("library");
     const before = useUi.getState().viewHistoryIndex;
-    useUi.getState().navigateForward(); // already at the top
+    useUi.getState().navigateForward(); await flush(); // already at the top
     expect(useUi.getState().viewHistoryIndex).toBe(before);
     // walk to the bottom, then one more back must stay
-    for (let i = 0; i < 12; i++) useUi.getState().navigateBack();
+    for (let i = 0; i < 12; i++) {
+      useUi.getState().navigateBack();
+      await flush();
+    }
     const bottom = useUi.getState().viewHistoryIndex;
     expect(bottom).toBe(0);
-    useUi.getState().navigateBack();
+    useUi.getState().navigateBack(); await flush();
     expect(useUi.getState().viewHistoryIndex).toBe(0);
     useUi.getState().navigate("home");
   });
 
-  it("openPlaylist lands in the history too", () => {
+  it("openPlaylist lands in the history too", async () => {
     useUi.getState().navigate("home");
     useUi.getState().openPlaylist(1);
     expect(useUi.getState().view).toBe("library");
-    useUi.getState().navigateBack();
+    useUi.getState().navigateBack(); await flush();
     expect(useUi.getState().view).toBe("home");
     useUi.getState().navigate("home");
   });

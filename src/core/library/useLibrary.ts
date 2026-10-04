@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { liveQuery, type Table } from "dexie";
 import { db } from "./db";
 import { splitGenres, type Grade, type TrackMeta } from "./types";
-import { computeWrapped } from "./wrapped";
+import { computeWrapped, type WrappedPlay } from "./wrapped";
 import { manifestToTracks } from "@/core/cloud/cloudService";
 import { useCloud } from "@/core/cloud/cloudStore";
 import { useCatalogue } from "@/core/cloud/catalogueStore";
+import { usePlayStats } from "@/core/cloud/playStats";
 
 export { splitGenres };
 
@@ -209,10 +210,12 @@ export function useTagStats(): TagStat[] {
   return useMemo(() => collectTagStats(tracks), [tracks]);
 }
 
-/** Year-in-review numbers over the whole play log. */
+/** Year-in-review numbers over the merged play log: the device's Dexie log
+ *  plus the account's synced log (path-keyed, so ids never matter). */
 export function useWrapped() {
   const tracks = useAllTracks();
   const [plays, setPlays] = useState<{ trackId: number; at: number }[]>([]);
+  const remotePlays = usePlayStats((s) => s.plays);
   useEffect(() => {
     const sub = liveQuery(() => db.plays.toArray()).subscribe({
       next: (v) => setPlays(v),
@@ -220,7 +223,13 @@ export function useWrapped() {
     });
     return () => sub.unsubscribe();
   }, []);
-  return useMemo(() => computeWrapped(plays, tracks), [plays, tracks]);
+  return useMemo(() => {
+    const byId = new Map(tracks.map((t) => [t.id, t]));
+    const local: WrappedPlay[] = plays.map((p) => ({ path: byId.get(p.trackId)?.path ?? null, at: p.at }));
+    const seen = new Set(local.map((p) => `${p.path}@${p.at}`));
+    const merged = [...local, ...remotePlays.filter((p) => !seen.has(`${p.path}@${p.at}`)).map((p) => ({ path: p.path, at: p.at }))];
+    return computeWrapped(merged, tracks);
+  }, [plays, remotePlays, tracks]);
 }
 
 export interface RecentPlay {

@@ -13,27 +13,33 @@ export interface WrappedStats {
   topTags: { name: string; plays: number }[];
 }
 
-interface PlayLike {
-  trackId: number;
+export interface WrappedPlay {
+  /** track path (local file path or cloud object key); null = the log row's
+   *  track no longer resolves anywhere, so the play is ignored */
+  path: string | null;
   at: number;
 }
 
-/** Year-in-review numbers derived from the play log. Pure + unit-tested. */
-export function computeWrapped(plays: PlayLike[], tracks: TrackMeta[]): WrappedStats {
-  const byId = new Map(tracks.map((t) => [t.id, t]));
-  const perTrack = new Map<number, number>();
-  for (const p of plays) perTrack.set(p.trackId, (perTrack.get(p.trackId) ?? 0) + 1);
+/** Year-in-review numbers derived from the play log. Pure + unit-tested.
+ *  Plays are keyed by track path so the local log and the account's synced
+ *  log merge into one view regardless of device-specific ids. */
+export function computeWrapped(plays: WrappedPlay[], tracks: TrackMeta[]): WrappedStats {
+  const byPath = new Map(tracks.map((t) => [t.path, t]));
+  const perTrack = new Map<string, number>();
+  for (const p of plays) if (p.path) perTrack.set(p.path, (perTrack.get(p.path) ?? 0) + 1);
 
   let minutes = 0;
   let uniqueTracks = 0;
+  let joinedPlays = 0;
   const artists = new Map<string, number>();
   const albums = new Map<string, number>();
   const tags = new Map<string, number>();
   let topTrack: { title: string; artist: string; plays: number } | null = null;
 
-  for (const [id, count] of perTrack) {
-    const t = byId.get(id);
+  for (const [path, count] of perTrack) {
+    const t = byPath.get(path);
     if (!t) continue;
+    joinedPlays += count;
     uniqueTracks++;
     minutes += (t.duration * count) / 60;
     const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + count);
@@ -51,7 +57,7 @@ export function computeWrapped(plays: PlayLike[], tracks: TrackMeta[]): WrappedS
 
   return {
     minutes: Math.round(minutes),
-    plays: plays.length,
+    plays: joinedPlays,
     uniqueTracks,
     topTrack,
     topArtists: top(artists, 5),

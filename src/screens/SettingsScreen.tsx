@@ -10,6 +10,7 @@ import { fx } from "@/fx/FxDirector";
 import type { FxQuality } from "@/skins/types";
 import { testConnection, normalizeCloudUrl } from "@/core/cloud/cloudService";
 import { useCloud } from "@/core/cloud/cloudStore";
+import { usePlayStats } from "@/core/cloud/playStats";
 import { useAuth } from "@/core/auth/authStore";
 import { logout } from "@/core/auth/authService";
 import { clearCoverCache } from "@/core/library/coverCache";
@@ -101,6 +102,7 @@ function CloudAccountSection() {
     a.setSession(null, null);
     a.setSessionExpired(false);
     useCloud.setState({ manifest: null, status: "idle", error: null });
+    usePlayStats.getState().clear();
     clearCoverCache();
     toast("Signed out", "success", "サインアウト");
   };
@@ -549,7 +551,7 @@ export function SettingsScreen() {
                     setEq(next);
                   }}
                   className="eq-slider w-full"
-                  style={{ "--fill": `${((eq[i] + 12) / 24) * 100}%` } as React.CSSProperties}
+                  style={{ "--p": `${(eq[i] + 12) / 24}` } as React.CSSProperties}
                 />
                 <span className="font-mono text-[9px]" style={{ color: "var(--ato-accent-2)" }}>
                   {eq[i] > 0 ? `+${eq[i]}` : eq[i]}
@@ -577,7 +579,7 @@ export function SettingsScreen() {
                 value={crossfadeSeconds}
                 onChange={(e) => setCrossfadeSeconds(parseFloat(e.target.value))}
                 className="ato-slider w-full cursor-pointer"
-                style={{ "--fill": `${(crossfadeSeconds / 12) * 100}%` } as React.CSSProperties}
+                style={{ "--p": `${crossfadeSeconds / 12}` } as React.CSSProperties}
               />
             </div>
             <div className="mt-4">

@@ -110,6 +110,7 @@ export async function switchToServer(id: string): Promise<boolean> {
   await Promise.allSettled([
     useFavorites.getState().pull(),
     useCloudPlaylists.getState().pull(),
+    import("./playStats").then((m) => m.usePlayStats.getState().pull()),
     import("@/core/cloud/catalogueStore").then((m) => m.useCatalogue.getState().refresh()),
     import("@/core/cloud/cataloguePlaylistStore").then((m) => m.useCataloguePlaylists.getState().pull()),
   ]);

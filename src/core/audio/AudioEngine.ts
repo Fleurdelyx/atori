@@ -626,6 +626,10 @@ class AudioEngine {
         }
       }),
     );
+    // mirror the play into the account's log (debounced, best-effort)
+    void import("@/core/cloud/playStats").then(({ usePlayStats }) =>
+      usePlayStats.getState().push({ path: track.path, at }),
+    );
   }
 
   private updateMediaSession(track: TrackMeta) {

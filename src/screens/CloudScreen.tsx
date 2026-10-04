@@ -18,6 +18,8 @@ import { SavedServers } from "./CloudScreenSavedServers";
 import { accountActive, type CloudPlaylist } from "@/core/cloud/accountService";
 import { useFavorites } from "@/core/cloud/favoritesStore";
 import { useCloudPlaylists } from "@/core/cloud/playlistStore";
+import { isLocalMirror } from "@/core/cloud/localPlaylistMirror";
+import { usePlayStats } from "@/core/cloud/playStats";
 import { useAuth } from "@/core/auth/authStore";
 import { db } from "@/core/library/db";
 import { groupAlbums } from "@/core/library/useLibrary";
@@ -74,6 +76,7 @@ export function CloudScreen() {
     if (accountActive()) {
       void useFavorites.getState().pull();
       void useCloudPlaylists.getState().pull();
+      void usePlayStats.getState().pull();
       void useCatalogue.getState().refresh();
       void import("@/core/cloud/cataloguePlaylistStore").then((m) => m.useCataloguePlaylists.getState().pull());
     }
@@ -491,6 +494,9 @@ function CloudPlaylistRow({
 }) {
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(playlist.name);
+  // mirrors of local playlists are read-only here: the LOCAL section owns
+  // their name and members (and re-pushes them on every local change)
+  const mirror = isLocalMirror(playlist);
 
   const members = playlist.trackKeys
     .map((k) => cloudTracks.find((t) => t.path === k))
@@ -534,16 +540,20 @@ function CloudPlaylistRow({
             },
           ]
         : []),
-      { divider: true, label: "" },
-      {
-        label: "Rename playlist",
-        jp: "改名",
-        run: () => {
-          setDraft(playlist.name);
-          setRenaming(true);
-        },
-      },
-      { label: "Delete playlist", jp: "削除", danger: true, run: deleteWithConfirm },
+      ...(mirror
+        ? []
+        : [
+            { divider: true, label: "" },
+            {
+              label: "Rename playlist",
+              jp: "改名",
+              run: () => {
+                setDraft(playlist.name);
+                setRenaming(true);
+              },
+            },
+            { label: "Delete playlist", jp: "削除", danger: true, run: deleteWithConfirm },
+          ]),
     ];
     showContextMenu(e, items);
   };
@@ -584,17 +594,29 @@ function CloudPlaylistRow({
         </span>
       ) : (
         <button onClick={onPlay} className="min-w-0 flex-1 text-left">
-          <span className="block truncate text-[13px] font-medium group-hover:text-accent">{playlist.name}</span>
+          <span className="block truncate text-[13px] font-medium group-hover:text-accent">
+            {playlist.name}
+            {mirror && (
+              <span
+                className="font-mono ml-2 align-middle text-[8px] tracking-[0.25em]"
+                style={{ color: "var(--ato-accent-2)" }}
+              >
+                SYNC
+              </span>
+            )}
+          </span>
           <span className="font-mono block text-[10px] text-dim">{playlist.trackKeys.length} TRACKS</span>
         </button>
       )}
-      <button
-        onClick={deleteWithConfirm}
-        className="p-1 text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent"
-        aria-label={`Delete ${playlist.name}`}
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
+      {!mirror && (
+        <button
+          onClick={deleteWithConfirm}
+          className="p-1 text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent"
+          aria-label={`Delete ${playlist.name}`}
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
     </div>
   );
 }

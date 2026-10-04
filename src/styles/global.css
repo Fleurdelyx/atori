@@ -308,10 +308,15 @@ body {
   appearance: none;
   height: 3px;
   outline: none;
+  /* the fill must end under the thumb CENTER, not at the raw percentage:
+     the thumb (9px) travels inset by half its width, so at 0%/100% the raw
+     percent under/overshoots the diamond (the "diamond behind the line" bug) */
+  --thumb: 9px;
+  --stop: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--p, 0));
   background: linear-gradient(
     90deg,
-    var(--ato-accent) 0 var(--fill, 0%),
-    var(--ato-border) var(--fill, 0%) 100%
+    var(--ato-accent) 0 var(--stop),
+    var(--ato-border) var(--stop) 100%
   );
   transition: height 0.15s ease;
 }
@@ -349,17 +354,19 @@ body {
   opacity: 1;
 }
 
-/* EQ band slider: ±12dB range; --fill marks the thumb position (same
-   left-anchored accent fill as .ato-slider, so 50% = 0dB) */
+/* EQ band slider: ±12dB range; --p is 0..1 (0.5 = 0dB), fill computed under
+   the thumb center like .ato-slider (10px thumb here) */
 .eq-slider {
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
   outline: none;
+  --thumb: 10px;
+  --stop: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--p, 0.5));
   background: linear-gradient(
     90deg,
-    var(--ato-accent) 0 var(--fill, 50%),
-    var(--ato-border) var(--fill, 50%) 100%
+    var(--ato-accent) 0 var(--stop),
+    var(--ato-border) var(--stop) 100%
   );
 }
 .eq-slider::-webkit-slider-thumb {

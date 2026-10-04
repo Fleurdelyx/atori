@@ -166,6 +166,8 @@ interface UiState {
   navigate: (view: ViewId, albumKey?: string, albumSource?: AlbumSource) => void;
   navigateBack: () => void;
   navigateForward: () => void;
+  /** jump the history to a web-history position (browser back/forward); never pushes */
+  restoreHistoryIndex: (index: number) => void;
   setRailCollapsed: (collapsed: boolean) => void;
   setCatalogueEnabled: (on: boolean) => void;
   setNowPlayingOpen: (open: boolean) => void;
@@ -197,7 +199,7 @@ interface UiState {
 
 export const useUi = create<UiState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       booted: sessionBooted(),
       view: "home",
       albumKey: null,
@@ -282,17 +284,24 @@ export const useUi = create<UiState>()(
             ...(push ? { viewHistory: push.hist, viewHistoryIndex: push.index } : {}),
           };
         }),
-      navigateBack: () =>
+      navigateBack: () => {
+        // the web history IS the view history (one pushState per entry), so
+        // back/forward route through it: the browser chrome, Alt+arrows and
+        // mouse side buttons all drive the same stack, and popstate moves
+        // the store via restoreHistoryIndex
+        if (get().viewHistoryIndex <= 0) return;
+        window.history.back();
+      },
+      navigateForward: () => {
+        const s = get();
+        if (s.viewHistoryIndex >= s.viewHistory.length - 1) return;
+        window.history.forward();
+      },
+      restoreHistoryIndex: (index) =>
         set((s) => {
-          if (s.viewHistoryIndex <= 0) return {};
-          const e = s.viewHistory[s.viewHistoryIndex - 1];
-          return { viewHistoryIndex: s.viewHistoryIndex - 1, view: e.view, albumKey: e.albumKey, albumSource: e.albumSource };
-        }),
-      navigateForward: () =>
-        set((s) => {
-          if (s.viewHistoryIndex >= s.viewHistory.length - 1) return {};
-          const e = s.viewHistory[s.viewHistoryIndex + 1];
-          return { viewHistoryIndex: s.viewHistoryIndex + 1, view: e.view, albumKey: e.albumKey, albumSource: e.albumSource };
+          if (index < 0 || index >= s.viewHistory.length || index === s.viewHistoryIndex) return {};
+          const e = s.viewHistory[index];
+          return { viewHistoryIndex: index, view: e.view, albumKey: e.albumKey, albumSource: e.albumSource };
         }),
       setRailCollapsed: (railCollapsed) => set({ railCollapsed }),
       setCatalogueEnabled: (catalogueEnabled) => set({ catalogueEnabled }),
@@ -397,3 +406,24 @@ export const useUi = create<UiState>()(
     },
   ),
 );
+
+/* Browser history integration: the webview/browser back & forward buttons
+   drive the same view history the app-side shortcuts use. One pushState per
+   pushed entry; popstate restores; back/forward move ONLY through history.
+   (Guard flag survives HMR so the listeners never double-install.) */
+const w = window as typeof window & { __navWired?: boolean };
+if (!w.__navWired) {
+  w.__navWired = true;
+  window.history.replaceState({ i: 0 }, "");
+  window.addEventListener("popstate", (e) => {
+    const i = (e.state as { i?: number } | null)?.i;
+    if (typeof i === "number") useUi.getState().restoreHistoryIndex(i);
+  });
+  useUi.subscribe((s, prev) => {
+    // a fresh navigation appended an entry (array identity changed + index
+    // moved to the new tail): mirror it into the web history
+    if (s.viewHistory !== prev.viewHistory && s.viewHistoryIndex > prev.viewHistoryIndex && s.viewHistoryIndex === s.viewHistory.length - 1) {
+      window.history.pushState({ i: s.viewHistoryIndex }, "");
+    }
+  });
+}
