@@ -1,5 +1,5 @@
 /**
- * ATRI app-icon generator: the pink star-slash mark (31A artwork).
+ * ATORI app-icon generator: the pink star-slash mark (31A artwork).
  * Decodes scripts/assets/31a-icon.png (RGBA, any square size) and resamples
  * it (Catmull-Rom) to every icon the project ships: src-tauri/icons/* (png
  * set + ico) and public/icons/* (PWA), plus public/favicon.png. Stdlib only.

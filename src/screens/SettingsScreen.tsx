@@ -382,7 +382,7 @@ export function SettingsScreen() {
                 if (e.key === "Enter") saveName();
                 if (e.key === "Escape") resetName();
               }}
-              placeholder="What should ATRI call you?"
+              placeholder="What should ATORI call you?"
               maxLength={24}
               className="font-mono w-60 bg-transparent px-3 py-2 text-[11px] outline-none"
               style={{ border: "1px solid var(--ato-border)" }}
@@ -752,7 +752,7 @@ export function SettingsScreen() {
         <SectionHeader title="ABOUT" jp="情報" />
         <div className="font-mono flex items-center gap-3 text-[10px] tracking-[0.2em] text-dim">
           <Shield className="h-3.5 w-3.5" style={{ color: "var(--ato-gold)" }} />
-          ATRI // LOCAL-FIRST
+          ATORI // LOCAL-FIRST
         </div>
       </section>
     </ScrollFade>

@@ -1,5 +1,5 @@
 /**
- * ATRI skin engine: a skin is data, not code paths.
+ * ATORI skin engine: a skin is data, not code paths.
  * Every skin supplies tokens (CSS custom properties), a motion profile,
  * a shader pack (GLSL body for the background stage), particle flavor,
  * post-fx recipe and font stacks. UI components only ever read tokens.

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { useUi } from "@/state/uiStore";
-import { fx } from "@/fx/FxDirector";
+
 import { getSkin } from "@/skins/registry";
 
 // slanted bands backing the boot screen; static clip-paths, animated with
@@ -43,7 +43,8 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
     function finish() {
       if (doneRef.current) return;
       doneRef.current = true;
-      fx.impact(1.2);
+      // no fx.impact here: the boot reveal is not a user action, and its
+      // radial flash over an idle shader read as a glitch on first open
       onDone();
     }
 
@@ -190,7 +191,7 @@ export function BootSequence({ onDone }: { onDone: () => void }) {
         <div className="relative flex flex-col items-center">
           <div className="boot-slash h-[2px] w-[min(70vw,560px)]" style={{ background: "var(--ato-accent)" }} />
           <div className="my-4 flex overflow-hidden">
-            {"ATRI".split("").map((ch, i) => (
+            {"ATORI".split("").map((ch, i) => (
               <span
                 key={i}
                 className="boot-letter font-display text-[clamp(64px,14vw,160px)] leading-none font-bold"

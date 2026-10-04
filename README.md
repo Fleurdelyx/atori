@@ -1,4 +1,4 @@
-# ATRI アトリ
+# ATORI アトリ
 
 An anime-aesthetic music player built as an art piece. Audio-reactive shader
 backgrounds, gacha-game UI language (slash wipes, cut-ins, kinetic type,

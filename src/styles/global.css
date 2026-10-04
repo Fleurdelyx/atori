@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ============================================================
-   ATRI global styles: token layer.
+   ATORI global styles: token layer.
    Defaults below are the NEON GACHA skin; SkinProvider overwrites
    them at runtime when a different skin is active. Tailwind v4
    `@theme inline` maps them into utilities (bg-ink, text-dim…).

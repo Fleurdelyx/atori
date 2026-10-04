@@ -50,9 +50,9 @@ await step("boot", async () => {
 await step("chooser-shown-first-run", async () => {
   await gotoCloud();
   const txt = await page.evaluate(() => document.body.innerText);
-  if (!/HOW SHOULD ATRI CONNECT\?/.test(txt)) throw new Error("chooser card missing on first run");
+  if (!/HOW SHOULD ATORI CONNECT\?/.test(txt)) throw new Error("chooser card missing on first run");
   // DEFAULT_SERVER_URL is filled in defaults.ts → the default option must show
-  if (!/USE ATRI CLOUD \(DEFAULT\)/.test(txt)) throw new Error("default option missing (is DEFAULT_SERVER_URL set?)");
+  if (!/USE ATORI CLOUD \(DEFAULT\)/.test(txt)) throw new Error("default option missing (is DEFAULT_SERVER_URL set?)");
   if (!/MY OWN SERVER/.test(txt) || !/WORK OFFLINE/.test(txt)) throw new Error("own-server/offline options missing");
   await shot("19-cloud-chooser");
 });
@@ -100,7 +100,7 @@ await step("go-online-restores-chooser", async () => {
   });
   await sleep(700);
   const txt = await page.evaluate(() => document.body.innerText);
-  if (!/HOW SHOULD ATRI CONNECT\?/.test(txt)) throw new Error("chooser did not return after GO ONLINE");
+  if (!/HOW SHOULD ATORI CONNECT\?/.test(txt)) throw new Error("chooser did not return after GO ONLINE");
   await shot("20-chooser-returned");
 });
 

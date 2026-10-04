@@ -1,6 +1,6 @@
 {
-  "name": "ATRI アトリ",
-  "short_name": "ATRI",
+  "name": "ATORI アトリ",
+  "short_name": "ATORI",
   "description": "Anime-aesthetic local-first music player",
   "start_url": "/",
   "display": "standalone",

@@ -107,7 +107,9 @@ export const usePlayback = create<PlaybackState>()((set) => ({
   isPlaying: false,
   position: 0,
   duration: 0,
-  volume: 0.9,
+  // fresh installs start quiet: many browsers/devices sit at max system
+  // volume and a full-blast first play is a bad first impression
+  volume: 0.3,
   repeat: "off",
   shuffle: false,
   current: null,
@@ -152,7 +154,7 @@ export const usePlayback = create<PlaybackState>()((set) => ({
   },
   muteToggle: () => {
     const s = usePlayback.getState();
-    if (s.volume === 0) s.setVolume(preMuteVolume || 0.9);
+    if (s.volume === 0) s.setVolume(preMuteVolume || 0.3);
     else {
       preMuteVolume = s.volume;
       s.setVolume(0);

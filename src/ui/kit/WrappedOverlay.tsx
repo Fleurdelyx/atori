@@ -4,7 +4,7 @@ import { useUi } from "@/state/uiStore";
 import { useWrapped } from "@/core/library/useLibrary";
 
 /**
- * WrappedOverlay: ATRI's year-in-review: minutes, top track/artist/album/tags
+ * WrappedOverlay: ATORI's year-in-review: minutes, top track/artist/album/tags
  * derived from the local play log. Recomputed live whenever it opens.
  */
 export function WrappedOverlay() {
@@ -47,7 +47,7 @@ export function WrappedOverlay() {
             <div className="flex items-center gap-3">
               <Sparkles className="h-5 w-5" style={{ color: "var(--ato-gold)" }} />
               <div>
-                <h2 className="font-display text-2xl font-bold tracking-wide">ATRI WRAPPED</h2>
+                <h2 className="font-display text-2xl font-bold tracking-wide">ATORI WRAPPED</h2>
                 <p className="font-mono text-[9px] tracking-[0.3em] text-dim">あなたの年間レポート · FROM YOUR LOCAL PLAY LOG</p>
               </div>
             </div>

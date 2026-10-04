@@ -1,4 +1,4 @@
-/* ATRI shell service worker: offline app shell + stale-while-revalidate
+/* ATORI shell service worker: offline app shell + stale-while-revalidate
    for same-origin assets. Cloud streams (cross-origin) and fonts are left
    to the browser/Cache API layers that already handle them. */
 const CACHE = "atori-shell-v1";

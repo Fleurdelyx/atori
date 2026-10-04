@@ -86,7 +86,7 @@ export function CommandPalette() {
     const acts: PaletteItem[] = [
       { id: "act:playpause", icon: <Play className="h-4 w-4" />, label: "Play / Pause", hint: "SPACE", run: toggle, score: scoreOf(q, "play pause 再生") },
       { id: "act:np", icon: <Disc3 className="h-4 w-4" />, label: "Open Now Playing", hint: "再生中", run: () => setNowPlayingOpen(true), score: scoreOf(q, "open now playing 再生中") },
-      { id: "act:wrapped", icon: <Sparkles className="h-4 w-4" />, label: "ATRI Wrapped: your stats", hint: "年間レポート", run: () => useUi.getState().setWrappedOpen(true), score: scoreOf(q, "atri wrapped stats year review 年間") },
+      { id: "act:wrapped", icon: <Sparkles className="h-4 w-4" />, label: "ATORI Wrapped: your stats", hint: "年間レポート", run: () => useUi.getState().setWrappedOpen(true), score: scoreOf(q, "atori wrapped stats year review 年間") },
       { id: "act:calm", icon: <Moon className="h-4 w-4" />, label: calm ? "Disable Calm Mode" : "Enable Calm Mode", hint: "マモード", run: () => setCalm(!calm), score: scoreOf(q, "calm motion reduced") },
       ...SKINS.map((s) => ({
         id: `skin:${s.id}`,

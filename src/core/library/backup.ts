@@ -57,7 +57,7 @@ export interface RestoreResult {
 export async function restoreBackup(file: File): Promise<RestoreResult> {
   const parsed = JSON.parse(await file.text()) as AtoriBackup;
   if (parsed.app !== "atori" || !Array.isArray(parsed.tracks)) {
-    throw new Error("Not an ATRI backup file");
+    throw new Error("Not an ATORI backup file");
   }
   const tracks = parsed.tracks.filter(
     (t) => typeof t?.id === "number" && typeof t?.path === "string",

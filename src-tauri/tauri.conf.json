@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ATRI",
+  "productName": "ATORI",
   "version": "0.2.0",
   "identifier": "app.atori.player",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ATRI アトリ",
+        "title": "ATORI アトリ",
         "width": 1400,
         "height": 880,
         "minWidth": 980,

@@ -73,7 +73,7 @@ console.log("STREAM REQUESTS:", coverRequests.slice(0, 4).join(" | ") || "NONE")
 // ---- name save/cancel + persistence (no dev hook on prod: read the UI) ----
 await clickNav("SETTINGS");
 await new Promise((r) => setTimeout(r, 1500));
-const input = await page.$('input[placeholder="What should ATRI call you?"]');
+const input = await page.$('input[placeholder="What should ATORI call you?"]');
 if (!input) {
   console.log("NAME INPUT: NOT FOUND");
 } else {
@@ -92,7 +92,7 @@ if (!input) {
   console.log("AFTER RELOAD greeting:", JSON.stringify(greeting));
   await clickNav("SETTINGS");
   await new Promise((r) => setTimeout(r, 1200));
-  const input2 = await page.$('input[placeholder="What should ATRI call you?"]');
+  const input2 = await page.$('input[placeholder="What should ATORI call you?"]');
   await input2.click({ clickCount: 3 });
   await input2.type("Nobody");
   await page.evaluate(() => {
@@ -100,7 +100,7 @@ if (!input) {
   });
   await new Promise((r) => setTimeout(r, 300));
   const after = await page.evaluate(() => ({
-    input: document.querySelector('input[placeholder="What should ATRI call you?"]').value,
+    input: document.querySelector('input[placeholder="What should ATORI call you?"]').value,
     store: JSON.parse(localStorage.getItem("atori-ui")).state.displayName,
   }));
   console.log("AFTER CANCEL:", JSON.stringify(after));

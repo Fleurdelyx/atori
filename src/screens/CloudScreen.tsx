@@ -169,7 +169,7 @@ export function CloudScreen() {
           style={{ border: "1px solid var(--ato-border)" }}
         >
           <div className="font-mono mb-1 text-[10px] tracking-[0.35em]" style={{ color: "var(--ato-accent)" }}>
-            HOW SHOULD ATRI CONNECT?
+            HOW SHOULD ATORI CONNECT?
           </div>
           <p className="mb-4 text-sm text-dim">
             Pick where your library lives: changeable anytime. 自分のサーバーも使えます。
@@ -189,7 +189,7 @@ export function CloudScreen() {
                   boxShadow: "0 0 24px color-mix(in srgb, var(--ato-accent) 35%, transparent)",
                 }}
               >
-                <Wifi className="h-4 w-4" /> USE ATRI CLOUD (DEFAULT)
+                <Wifi className="h-4 w-4" /> USE ATORI CLOUD (DEFAULT)
               </button>
             )}
             <button

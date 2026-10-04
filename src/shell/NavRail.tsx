@@ -107,7 +107,7 @@ export function NavRail() {
             initial={false}
             animate={collapsed ? "collapsed" : "expanded"}
           >
-            <div className="font-display text-xl leading-none font-bold tracking-widest">ATRI</div>
+            <div className="font-display text-xl leading-none font-bold tracking-widest">ATORI</div>
             <div className="font-jp mt-1 text-[10px] tracking-[0.4em] text-dim">アトリ</div>
           </motion.div>
         </div>
@@ -574,7 +574,7 @@ export function EdgeDeco() {
   return (
     <div className="pointer-events-none absolute top-1/2 right-2 z-10 hidden -translate-y-1/2 xl:block">
       <div className="v-text font-mono text-[9px] tracking-[0.5em] text-dim opacity-40">
-        ATRI // MUSIC VISUAL EXPERIENCE · 音楽と視覚の融合
+        ATORI // MUSIC VISUAL EXPERIENCE · 音楽と視覚の融合
       </div>
     </div>
   );

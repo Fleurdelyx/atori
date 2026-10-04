@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { validateMediaUrl } from "./validate.mjs";
 
 /**
- * ATRI companion: a tiny local helper that lets the web app add songs from
+ * ATORI companion: a tiny local helper that lets the web app add songs from
  * streaming links by shelling out to yt-dlp. Zero dependencies.
  *
  *   npm run companion        (then add tracks from the library's ADD URL panel)

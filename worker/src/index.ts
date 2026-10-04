@@ -771,6 +771,16 @@ app.get("/api/catalogue/public", async (c) => {
   });
 });
 
+/** catalogue playlists are public too: signed-out visitors browse the same
+ *  storefront; writes stay admin-only via catalogueAuth below */
+app.get("/api/catalogue/playlists", async (c) => {
+  const obj = await c.env.LIBRARY.get("catalogue/playlists.json");
+  if (!obj) return c.json({ version: 1, updatedAt: 0, playlists: [] });
+  return new Response(obj.body, {
+    headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=30" },
+  });
+});
+
 const catalogueAuth: MiddlewareHandler = async (c, next) => {
   const token = bearerOrQueryToken(c);
   if (c.env.AUTH_TOKEN && token === c.env.AUTH_TOKEN) return next(); // legacy owner
@@ -813,14 +823,6 @@ app.put("/api/catalogue/manifest", async (c) => {
 
 /* catalogue playlists: admin-curated orderings over catalogue/ track keys,
    one JSON object so every client reads the same list */
-app.get("/api/catalogue/playlists", async (c) => {
-  const obj = await c.env.LIBRARY.get("catalogue/playlists.json");
-  if (!obj) return c.json({ version: 1, updatedAt: 0, playlists: [] });
-  return new Response(obj.body, {
-    headers: { "Content-Type": "application/json", ETag: obj.httpEtag },
-  });
-});
-
 app.put("/api/catalogue/playlists", async (c) => {
   const body = await c.req.text();
   try {
