@@ -68,6 +68,10 @@ if (savedVolumeRaw != null) {
   const savedVolume = Number(savedVolumeRaw);
   if (Number.isFinite(savedVolume)) usePlayback.getState().setVolume(Math.min(1, Math.max(0, savedVolume)));
 }
+// the engine must ALWAYS end up at the store's volume: on a fresh install
+// nothing above fires, and the engine's constructor default would otherwise
+// disagree with the store (first play at full blast while the UI shows 30%)
+engine.setVolume(usePlayback.getState().volume);
 // Cross-device continue-listening: pushes mirror the local save moments
 // (pause / track change / tab hidden). putResume no-ops unless signed in.
 setCloudResumePush((s) => {

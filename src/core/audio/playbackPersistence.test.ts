@@ -50,6 +50,13 @@ describe("volume persistence", () => {
     expect(localStorage.getItem("atori:volume")).toBe("0.37");
     expect(usePlayback.getState().volume).toBeCloseTo(0.37);
   });
+
+  it("the engine applies the store volume, squared for perception", () => {
+    usePlayback.getState().setVolume(0.3);
+    expect(engine.el.volume).toBeCloseTo(0.09);
+    usePlayback.getState().setVolume(0.5);
+    expect(engine.el.volume).toBeCloseTo(0.25);
+  });
 });
 
 describe("last-track persistence", () => {

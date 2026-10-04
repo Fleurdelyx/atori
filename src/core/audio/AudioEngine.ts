@@ -91,7 +91,9 @@ class AudioEngine {
     this.elA = AudioEngine.makeElement();
     this.elB = AudioEngine.makeElement();
     this.el = this.elA;
-    this.setVolume(0.9);
+    // keep in sync with playbackStore's default: main.tsx re-applies the
+    // store's (possibly restored) volume at boot, but this is the pre-wire value
+    this.setVolume(0.3);
     this.bindElementEvents(this.elA);
     this.bindElementEvents(this.elB);
   }
