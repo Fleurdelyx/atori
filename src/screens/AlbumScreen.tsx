@@ -45,6 +45,13 @@ export function AlbumScreen() {
 
   const totalSec = album.tracks.reduce((s, t) => s + (t.duration || 0), 0);
   const startIdx = Math.floor(Math.random() * album.tracks.length);
+  // BACK is history-first: an album opened from HOME returns to HOME, the
+  // hard-coded source fallback only applies when there is no history behind
+  const goBack = () => {
+    const s = useUi.getState();
+    if (s.viewHistoryIndex > 0) s.navigateBack();
+    else navigate(backView);
+  };
 
   return (
     <div className="h-full overflow-y-auto">
@@ -59,7 +66,7 @@ export function AlbumScreen() {
         />
         <div className="relative flex flex-col items-center gap-5 px-5 pt-14 md:flex-row md:items-start md:gap-10 md:px-10 md:pt-16">
           <button
-            onClick={() => navigate(backView)}
+            onClick={goBack}
             className="clip-tag font-mono absolute top-5 left-5 flex items-center gap-2 px-4 py-2 text-[11px] tracking-[0.3em] backdrop-blur-md transition-colors md:left-10 md:top-6"
             style={{
               color: "var(--ato-text-dim)",

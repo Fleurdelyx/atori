@@ -9,6 +9,7 @@ import { engine, EQ_FREQS, audioGraphSupported } from "@/core/audio/AudioEngine"
 import { fx } from "@/fx/FxDirector";
 import type { FxQuality } from "@/skins/types";
 import { testConnection, normalizeCloudUrl } from "@/core/cloud/cloudService";
+import { DEFAULT_SERVER_URL, defaultServerConfigured } from "@/core/cloud/defaults";
 import { useCloud } from "@/core/cloud/cloudStore";
 import { usePlayStats } from "@/core/cloud/playStats";
 import { useAuth } from "@/core/auth/authStore";
@@ -107,7 +108,7 @@ function CloudAccountSection() {
     toast("Signed out", "success", "サインアウト");
   };
 
-  const urlOk = normalizeCloudUrl(serverUrl) !== null;
+  const urlOk = normalizeCloudUrl(serverUrl) !== null || (defaultServerConfigured() && !serverUrl.trim());
 
   return (
     <>
@@ -171,7 +172,7 @@ function CloudAccountSection() {
             <input
               value={serverUrl}
               onChange={(e) => setServerUrl(e.target.value)}
-              placeholder="https://atori-cloud.<you>.workers.dev"
+              placeholder={defaultServerConfigured() ? DEFAULT_SERVER_URL : "https://atori-cloud.<you>.workers.dev"}
               className="font-mono w-full bg-transparent px-3 py-2 text-xs outline-none"
               style={{ border: "1px solid var(--ato-border)" }}
             />

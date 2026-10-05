@@ -168,7 +168,13 @@ export function AddUrlPanel({ open, onClose }: { open: boolean; onClose: () => v
       await importOne(url, fmt);
       onClose();
     } catch (e) {
-      setPhase({ kind: "error", message: e instanceof Error ? e.message : "download failed" });
+      const raw = e instanceof Error ? e.message : "download failed";
+      // a mangled clipboard or a half-pasted link surfaces as the engine's
+      // raw URL TypeError: say something a human can act on instead
+      const message = /invalid url/i.test(raw)
+        ? "That doesn't look like a link: paste the full address (starts with https://)"
+        : raw;
+      setPhase({ kind: "error", message });
     }
   };
 
@@ -286,6 +292,11 @@ export function AddUrlPanel({ open, onClose }: { open: boolean; onClose: () => v
                 onPaste={(e) => {
                   const text = e.clipboardData.getData("text").trim();
                   if (!text || busy) return;
+                  // only a link auto-submits: pasting a title, a sentence or a
+                  // mangled clipboard blob lands in the field as a search
+                  const looksLikeLink =
+                    /^https?:\/\//i.test(text) || /^(www\.)?[a-z0-9-]+\.[a-z]{2,}([/?#]|$)/i.test(text);
+                  if (!looksLikeLink) return;
                   e.preventDefault();
                   setInput(text);
                   void submit(text);

@@ -18,21 +18,26 @@ let initialized = false;
 export function SkinProvider({ children }: { children: React.ReactNode }) {
   const skinId = useUi((s) => s.skinId);
   const accentOverride = useUi((s) => s.accentOverride);
-  const skin = useMemo(() => getSkin(skinId), [skinId]);
+  // the override rides INSIDE the skin object (not just the CSS var): every
+  // consumer of useSkin(), the shader stage included, then follows the theme
+  // color the moment it changes instead of drifting on the skin's default
+  const skin = useMemo(() => {
+    const base = getSkin(skinId);
+    if (!accentOverride) return base;
+    return { ...base, tokens: { ...base.tokens, "--ato-accent": accentOverride } };
+  }, [skinId, accentOverride]);
 
   useEffect(() => {
     // Push token custom-properties onto :root; Tailwind utilities reference them.
     const root = document.documentElement;
     for (const [k, v] of Object.entries(skin.tokens)) root.style.setProperty(k, v);
-    // user accent (theme studio) rides on top of any skin
-    if (accentOverride) root.style.setProperty("--ato-accent", accentOverride);
     // data-skin lets CSS gate skin-specific shapes (e.g. persona textboxes)
     root.dataset.skin = skin.id;
     // keep the browser chrome tint in sync with the skin's background
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", skin.tokens["--ato-bg"] ?? "#0b0b12");
     useSkinStore.setState({ skin });
     initialized = true;
-  }, [skin, accentOverride]);
+  }, [skin]);
 
   return <>{children}</>;
 }

@@ -43,6 +43,12 @@ export function ShaderStage() {
     }
     rendererRef.current = renderer;
 
+    // some browsers (mobile forks especially) drop the GL context under
+    // pressure: preventDefault + three's restore path brings the wallpaper
+    // back instead of leaving a dead canvas until the next reload
+    const onLost = (e: Event) => e.preventDefault();
+    canvas.addEventListener("webglcontextlost", onLost);
+
     const uniforms: Record<string, THREE.IUniform> = {
       uTime: { value: 0 },
       uRes: { value: new THREE.Vector2(1, 1) },
@@ -138,6 +144,7 @@ export function ShaderStage() {
       offImpact();
       offWipe();
       window.removeEventListener("resize", resize);
+      canvas.removeEventListener("webglcontextlost", onLost);
       material.dispose();
       bandsTex.dispose();
       scene.clear();

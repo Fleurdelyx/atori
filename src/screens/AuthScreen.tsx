@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useAuth } from "@/core/auth/authStore";
 import { login, register } from "@/core/auth/authService";
+import { DEFAULT_SERVER_URL, defaultServerConfigured } from "@/core/cloud/defaults";
 import { useCloud } from "@/core/cloud/cloudStore";
 import { toast } from "@/state/toastStore";
 
@@ -28,11 +29,15 @@ export function AuthScreen() {
 
   useEffect(() => {
     if (authOpen) {
+      // a visitor who never opened the CLOUD screen has no server yet: the
+      // default worker fills in so SIGN IN / CREATE ACCOUNT work immediately
+      if (!serverUrl.trim() && defaultServerConfigured()) setServerUrl(DEFAULT_SERVER_URL);
       setMode(requestedMode);
       setError(sessionExpired ? "Session expired: sign in again" : "");
       setPassword("");
       setBusy(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authOpen, sessionExpired, requestedMode]);
 
   const submit = async () => {

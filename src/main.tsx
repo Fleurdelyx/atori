@@ -158,11 +158,12 @@ document.addEventListener("visibilitychange", () => {
 
 if (import.meta.env.DEV) {
   // Dev-only console/testing hook
-  const [{ db }, { audioLevels }] = await Promise.all([
+  const [{ db }, { audioLevels }, { useSkinStore }] = await Promise.all([
     import("@/core/library/db"),
     import("@/core/audio/AudioLevels"),
+    import("@/skins/SkinProvider"),
   ]);
-  (window as unknown as { __atori: unknown }).__atori = { engine, useUi, db, audioLevels };
+  (window as unknown as { __atori: unknown }).__atori = { engine, useUi, db, audioLevels, useSkinStore };
   if (new URLSearchParams(location.search).has("demo")) {
     void import("@/core/library/demo").then((m) => m.runDemoImport());
   }
