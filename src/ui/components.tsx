@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, Disc3, DiscAlbum, Heart, Play, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Disc3, DiscAlbum, Film, Heart, Play, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { usePlayback } from "@/core/audio/playbackStore";
 import { useUi, type AlbumSource } from "@/state/uiStore";
@@ -7,38 +7,61 @@ import { formatTime, type TrackMeta } from "@/core/library/types";
 import { isCatalogueTrack } from "@/core/cloud/cloudService";
 import type { AlbumInfo } from "@/core/library/useLibrary";
 import { loadCoverUrl } from "@/core/library/coverCache";
+import { db } from "@/core/library/db";
 import { HoloCover } from "./kit/HoloCover";
 import { GradeBadge } from "./kit/GradeBadge";
 import { showAlbumMenu, showTrackMenu } from "./menus";
 
-/** CoverThumb: small album-art tile for track rows; gradient + disc fallback. */
-export function CoverThumb({ track, className = "" }: { track: TrackMeta; className?: string }) {
+/** CoverThumb: small album-art tile for track rows; gradient + disc fallback.
+ *  A track with an attached visual (clip/gif/video) wears a film-badge so the
+ *  attachment is visible right in the list. */
+export function CoverThumb({ track, className = "" }: { track: TrackMeta; className: string }) {
   const [url, setUrl] = useState<string | null>(null);
+  const [hasVisual, setHasVisual] = useState(false);
   useEffect(() => {
     let alive = true;
     setUrl(null);
+    setHasVisual(false);
     if (track.coverKey) {
       void loadCoverUrl(track.coverKey).then((u) => {
         if (alive && u) setUrl(u);
       });
     }
+    void db.visuals
+      .get(track.id)
+      .then((v) => {
+        if (alive) setHasVisual(!!v);
+      })
+      .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [track.coverKey]);
+  }, [track.coverKey, track.id]);
 
-  if (url) {
-    return <img src={url} alt="" className={`shrink-0 object-cover ${className}`} draggable={false} />;
-  }
   return (
-    <span
-      className={`flex shrink-0 items-center justify-center ${className}`}
-      style={{
-        background:
-          "linear-gradient(135deg, color-mix(in srgb, var(--ato-accent) 22%, transparent), color-mix(in srgb, var(--ato-accent-2) 18%, transparent))",
-      }}
-    >
-      <Disc3 className="h-1/2 w-1/2 text-dim" strokeWidth={1.5} />
+    <span className={`relative inline-flex shrink-0 overflow-hidden ${className}`}>
+      {url ? (
+        <img src={url} alt="" className="h-full w-full object-cover" draggable={false} />
+      ) : (
+        <span
+          className="flex h-full w-full items-center justify-center"
+          style={{
+            background:
+              "linear-gradient(135deg, color-mix(in srgb, var(--ato-accent) 22%, transparent), color-mix(in srgb, var(--ato-accent-2) 18%, transparent))",
+          }}
+        >
+          <Disc3 className="h-1/2 w-1/2 text-dim" strokeWidth={1.5} />
+        </span>
+      )}
+      {hasVisual && (
+        <span
+          className="absolute right-0.5 bottom-0.5 z-10 flex h-3.5 w-3.5 items-center justify-center"
+          style={{ background: "rgba(0,0,0,.55)", borderRadius: 3 }}
+          title="Visual attached"
+        >
+          <Film className="h-2.5 w-2.5 text-white" />
+        </span>
+      )}
     </span>
   );
 }

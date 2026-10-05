@@ -34,6 +34,33 @@ type MouseEventLike = {
   clientY: number;
 };
 
+/**
+ * Shared off-screen file input for programmatic picks. Mobile browsers ignore
+ * .click() on inputs that were never added to the document, so context-menu
+ * actions (attach visual, playlist picture) all route through this one
+ * persistent element.
+ */
+let sharedPick: HTMLInputElement | null = null;
+function pickFile(accept: string, onPick: (file: File) => void) {
+  if (!sharedPick) {
+    sharedPick = document.createElement("input");
+    sharedPick.type = "file";
+    sharedPick.style.position = "fixed";
+    sharedPick.style.left = "-9999px";
+    sharedPick.style.width = "1px";
+    sharedPick.style.height = "1px";
+    sharedPick.style.opacity = "0";
+    document.body.appendChild(sharedPick);
+  }
+  sharedPick.accept = accept;
+  sharedPick.onchange = () => {
+    const f = sharedPick?.files?.[0];
+    if (f) onPick(f);
+    sharedPick!.value = "";
+  };
+  sharedPick.click();
+}
+
 /** Right-click menu for a track row. */
 export async function showTrackMenu(e: MouseEventLike, track: TrackMeta, context: TrackMeta[]) {
   // must happen synchronously: preventDefault after an await is too late and
@@ -172,18 +199,12 @@ export async function showTrackMenu(e: MouseEventLike, track: TrackMeta, context
       label: "Attach visual",
       jp: "ビジュアル",
       run: () => {
-        // runs inside the menu click: the file picker keeps its user gesture
-        const inp = document.createElement("input");
-        inp.type = "file";
-        inp.accept = "video/mp4,video/webm,video/quicktime,image/gif,.mp4,.webm,.mov,.gif";
-        inp.onchange = () => {
-          const f = inp.files?.[0];
-          if (!f) return;
+        // runs inside the menu click: the picker keeps its user gesture
+        pickFile("video/mp4,video/webm,video/quicktime,image/gif,.mp4,.webm,.mov,.gif", (f) => {
           void setVisual(track.id, f).then(() =>
             toast(`Visual attached to ${track.title}`, "success", "ビジュアル設定"),
           );
-        };
-        inp.click();
+        });
       },
     });
   }
@@ -550,17 +571,12 @@ async function playPlaylist(id: number, shuffle: boolean) {
 
 /** Pick a new picture for a playlist from the user's files. */
 function pickPlaylistPicture(id: number) {
-  const inp = document.createElement("input");
-  inp.type = "file";
-  inp.accept = "image/*";
-  inp.onchange = () => {
-    const f = inp.files?.[0];
-    if (!f || !f.type.startsWith("image/")) return;
+  pickFile("image/*", (f) => {
+    if (!f.type.startsWith("image/")) return;
     void db.playlists.update(id, { pic: f }).then(() =>
       toast("Playlist picture updated", "success", "カバー更新"),
     );
-  };
-  inp.click();
+  });
 }
 
 /**
