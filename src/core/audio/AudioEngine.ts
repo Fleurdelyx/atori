@@ -101,9 +101,14 @@ class AudioEngine {
     // the context on background and do not reliably resume it themselves
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "visible" && this.ctx?.state === "suspended") {
-          void this.ctx.resume().catch(() => {});
+        if (document.visibilityState === "visible") {
+          if (this.ctx?.state === "suspended") void this.ctx.resume().catch(() => {});
+          return;
         }
+        // going hidden: some mobile browsers let the media notification die
+        // while the tab is away, which ends background playback. Re-assert
+        // the session so the OS keeps treating this page as active media.
+        if (!this.el.paused && this.current) this.updateMediaSession(this.current);
       });
     }
   }
@@ -144,20 +149,29 @@ class AudioEngine {
   /** Only the active element drives engine state: the idle one is fading in/out. */
   private bindElementEvents(el: HTMLAudioElement) {
     const active = () => el === this.el;
+    const session = () => ("mediaSession" in navigator ? navigator.mediaSession : null);
     el.addEventListener("timeupdate", () => {
       if (!active()) return;
       this.emit({ position: el.currentTime });
+      this.updatePositionState();
       this.checkAutoTransition();
     });
     el.addEventListener("durationchange", () => {
       if (!active()) return;
       this.emit({ duration: el.duration || 0 });
+      this.updatePositionState();
     });
     el.addEventListener("play", () => {
-      if (active()) this.emit({ isPlaying: true });
+      if (!active()) return;
+      this.emit({ isPlaying: true });
+      const s = session();
+      if (s) s.playbackState = "playing";
     });
     el.addEventListener("pause", () => {
-      if (active()) this.emit({ isPlaying: false });
+      if (!active()) return;
+      this.emit({ isPlaying: false });
+      const s = session();
+      if (s) s.playbackState = "paused";
     });
     el.addEventListener("ended", () => {
       if (!active() || this.transitioning) return;
@@ -693,13 +707,45 @@ class AudioEngine {
       album: track.album,
       artwork: artwork ? [{ src: artwork, sizes: "512x512" }] : [],
     });
-    navigator.mediaSession.setActionHandler("play", () => this.play());
-    navigator.mediaSession.setActionHandler("pause", () => this.pause());
-    navigator.mediaSession.setActionHandler("previoustrack", () => this.prev());
-    navigator.mediaSession.setActionHandler("nexttrack", () => this.next());
-    navigator.mediaSession.setActionHandler("seekto", (d) => {
+    // action set is guarded: unsupported actions throw on some platforms
+    const on = (action: MediaSessionAction, fn: MediaSessionActionHandler) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, fn);
+      } catch {
+        /* platform without this action */
+      }
+    };
+    on("play", () => void this.play());
+    on("pause", () => void this.pause());
+    on("previoustrack", () => void this.prev());
+    on("nexttrack", () => void this.next());
+    on("seekto", (d) => {
       if (d.seekTime != null) this.seek(d.seekTime);
     });
+    on("seekbackward", () => this.seek(this.el.currentTime - 10));
+    on("seekforward", () => this.seek(this.el.currentTime + 10));
+    on("stop", () => void this.pause());
+    // claimed at LOAD start (updateMediaSession is called before play()
+    // resolves): the buffering gap is exactly when Chrome considers the page
+    // "not playing" and drops the notification + audio focus
+    navigator.mediaSession.playbackState = "playing";
+    this.updatePositionState();
+  }
+
+  /** Lock-screen seekbar position (Chrome renders it from this, not timeupdate). */
+  private updatePositionState() {
+    if (!("mediaSession" in navigator) || typeof navigator.mediaSession.setPositionState !== "function") return;
+    const d = this.el.duration;
+    if (!Number.isFinite(d) || d <= 0) return;
+    try {
+      navigator.mediaSession.setPositionState({
+        duration: d,
+        playbackRate: this.el.playbackRate,
+        position: Math.min(this.el.currentTime, d),
+      });
+    } catch {
+      /* invalid state races (duration shrank mid-seek): next tick fixes it */
+    }
   }
 
   async play() {

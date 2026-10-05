@@ -512,6 +512,8 @@ export function SettingsScreen() {
           {!audioGraphSupported() && (
             <p className="font-mono mb-4 text-[9px] leading-relaxed tracking-[0.2em]" style={{ color: "var(--ato-gold)" }}>
               TOUCH DEVICE // EQ + SMART VOLUME LIVE ON THE DESKTOP AUDIO GRAPH. PLAYBACK USES THE NATIVE PATH HERE SO BACKGROUND AUDIO STAYS CLEAN.
+              <br />
+              IF MUSIC STOPS IN OTHER APPS: SET YOUR BROWSER TO UNRESTRICTED IN ANDROID BATTERY SETTINGS. SOME PHONE MAKERS KILL BACKGROUND APPS AND THE WEB CANNOT OVERRIDE THAT.
             </p>
           )}
           {audioGraphSupported() && (

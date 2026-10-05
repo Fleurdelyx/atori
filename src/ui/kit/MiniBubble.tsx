@@ -10,8 +10,8 @@ import { resolveVisualSource, type VisualSource } from "@/core/library/visuals";
 import { formatTime } from "@/core/library/types";
 
 const POS_KEY = "atori:bubblePos";
-const W = 264;
-const H = 84;
+const W = 300;
+const H = 96;
 
 /** saved bubble position, clamped to the current viewport (eager: the card
  *  renders in the right place on its very first frame) */
@@ -164,7 +164,7 @@ export function MiniBubble() {
       {show && current && (
         <motion.div
           ref={cardRef}
-          className="clip-notch fixed z-[55] select-none backdrop-blur-xl"
+          className="clip-notch fixed z-[55] touch-none select-none backdrop-blur-xl"
           style={{
             left: pos.current!.x,
             top: pos.current!.y,
@@ -182,7 +182,7 @@ export function MiniBubble() {
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
         >
-          <div className="flex items-stretch gap-3 p-2.5">
+          <div className="flex items-stretch gap-3 p-3">
             {/* art / live visual: tap to reopen Now Playing */}
             <button
               data-nodrag
@@ -190,7 +190,7 @@ export function MiniBubble() {
                 setOpen(false);
                 useUi.getState().setNowPlayingOpen(true);
               }}
-              className="group/art relative h-[64px] w-[64px] shrink-0 overflow-hidden"
+              className="group/art relative h-[72px] w-[72px] shrink-0 overflow-hidden"
               style={{ borderRadius: "var(--ato-radius)" }}
               title="Open Now Playing"
               aria-label="Open Now Playing"
@@ -214,14 +214,14 @@ export function MiniBubble() {
 
             <div className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
               <div className="min-w-0">
-                <div className="truncate text-[12.5px] font-semibold">{current.title}</div>
-                <div className="truncate text-[10.5px] text-dim">{current.artist}</div>
+                <div className="truncate text-[13px] font-semibold">{current.title}</div>
+                <div className="truncate text-[11px] text-dim">{current.artist}</div>
               </div>
 
               {/* seek line + elapsed */}
               <div
                 data-nodrag
-                className="group my-1 h-1.5 cursor-pointer touch-none"
+                className="group my-1 flex h-2 cursor-pointer touch-none items-center"
                 title="Seek"
                 onPointerDown={seek}
               >
@@ -236,20 +236,20 @@ export function MiniBubble() {
 
               <div className="font-mono flex items-center justify-between text-[9px] text-dim">
                 <span ref={timeRef}>0:00</span>
-                <div data-nodrag className="flex items-center gap-1">
+                <div data-nodrag className="-mr-1 flex items-center gap-0.5">
                   <button
                     onClick={toggle}
-                    className="rounded-full p-1.5"
+                    className="rounded-full p-2"
                     style={{ background: "var(--ato-accent)", color: "var(--ato-bg)" }}
                     aria-label={isPlaying ? "Pause" : "Play"}
                   >
-                    {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                    {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                   </button>
-                  <button onClick={next} className="p-1 text-dim hover:text-accent" aria-label="Next">
-                    <SkipForward className="h-3.5 w-3.5" />
+                  <button onClick={next} className="p-2 text-dim hover:text-accent" aria-label="Next">
+                    <SkipForward className="h-4 w-4" />
                   </button>
-                  <button onClick={() => setOpen(false)} className="p-1 text-dim hover:text-accent" aria-label="Dismiss mini player">
-                    <X className="h-3.5 w-3.5" />
+                  <button onClick={() => setOpen(false)} className="p-2 text-dim hover:text-accent" aria-label="Dismiss mini player">
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               </div>
