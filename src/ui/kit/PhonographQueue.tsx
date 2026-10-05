@@ -275,7 +275,9 @@ function Rail({
 
   return (
     <>
-      <header className="flex items-center justify-between px-5 py-4" style={{ borderBottom: "1px solid var(--ato-border)" }}>
+      {/* the rail's own header pairs with the disc stage: below the stage's
+          720px breakpoint the QUEUE panel header alone drives (no double X) */}
+      <header className="hidden items-center justify-between px-5 py-4 @[720px]:flex" style={{ borderBottom: "1px solid var(--ato-border)" }}>
         <div className="flex items-center gap-3">
           <LogoMark className="h-7 w-7" />
           <span className="font-display text-base font-bold tracking-[0.22em]">PHONOGRAPH</span>

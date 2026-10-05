@@ -57,10 +57,10 @@ export function AlbumScreen() {
               "linear-gradient(180deg, color-mix(in srgb, var(--ato-accent) 10%, transparent), transparent 70%)",
           }}
         />
-        <div className="relative flex flex-col items-center gap-7 px-10 pt-16 md:flex-row md:items-start md:gap-10">
+        <div className="relative flex flex-col items-center gap-5 px-5 pt-14 md:flex-row md:items-start md:gap-10 md:px-10 md:pt-16">
           <button
             onClick={() => navigate(backView)}
-            className="clip-tag font-mono absolute top-6 left-10 flex items-center gap-2 px-4 py-2 text-[11px] tracking-[0.3em] backdrop-blur-md transition-colors"
+            className="clip-tag font-mono absolute top-5 left-5 flex items-center gap-2 px-4 py-2 text-[11px] tracking-[0.3em] backdrop-blur-md transition-colors md:left-10 md:top-6"
             style={{
               color: "var(--ato-text-dim)",
               background: "color-mix(in srgb, var(--ato-panel) 70%, transparent)",
@@ -75,21 +75,21 @@ export function AlbumScreen() {
             coverKey={album.coverKey}
             title={album.name}
             grade={album.grade}
-            className="mt-6 h-52 w-52 shadow-2xl md:mt-10"
+            className="mt-8 h-40 w-40 shadow-2xl md:mt-10 md:h-52 md:w-52"
           />
           <div className="min-w-0">
-            <div className="font-mono flex items-center gap-3 text-[10px] tracking-[0.3em] text-dim">
+            <div className="font-mono flex flex-wrap items-center gap-3 text-[10px] tracking-[0.3em] text-dim">
               <span style={{ color: "var(--ato-accent)" }}>ALBUM</span>
               <span>アルバム</span>
               <GradeBadge grade={album.grade} />
             </div>
-            <h1 className="font-display mt-2 text-4xl leading-tight font-bold">{album.name}</h1>
+            <h1 className="font-display mt-2 text-3xl leading-tight font-bold md:text-4xl">{album.name}</h1>
             <p className="mt-2 text-sm text-dim">
               {album.artist}
               {album.year ? ` · ${album.year}` : ""} · {album.tracks.length} tracks ·{" "}
               {formatTime(totalSec)}
             </p>
-            <div className="mt-6 flex gap-3">
+            <div className="mt-6 flex flex-wrap gap-3">
               <button
                 onClick={() => {
                   fx.impact(1);
@@ -136,7 +136,7 @@ export function AlbumScreen() {
       </div>
 
       {/* tracklist */}
-      <div className="px-6 pt-8 pb-10">
+      <div className="px-3 pt-8 pb-10 md:px-6">
         {album.tracks.map((t, i) => (
           <TrackRow key={t.id} track={t} index={i} context={album.tracks} />
         ))}

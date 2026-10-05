@@ -289,14 +289,17 @@ body {
   height: 3rem;
   width: 100%;
   align-items: center;
-  column-gap: 0.75rem;
+  column-gap: 0.5rem;
   padding-left: 0.75rem;
   padding-right: 0.75rem;
-  /* like-heart column sits between the number and the art */
-  grid-template-columns: 2.25rem 1.25rem 2.25rem minmax(0, 1fr) auto;
+  /* mobile: like · art · title · badges · trailing action — the number and
+     album cells only exist from md up; the last auto column collapses to 0
+     unless a remove button is present */
+  grid-template-columns: 1.25rem 2.25rem minmax(0, 1fr) auto auto;
 }
 @media (min-width: 768px) {
   .track-row {
+    column-gap: 0.75rem;
     grid-template-columns: 2rem 1.25rem 2.25rem minmax(0, 1fr) 10rem auto 5ch;
   }
 }

@@ -186,7 +186,7 @@ function EmptyLibrary({ onImport, progress }: { onImport: () => void; progress: 
   return (
     <div className="mx-auto mt-10 max-w-2xl">
       <div
-        className="clip-notch relative border border-dashed bg-panel px-10 py-16 text-center backdrop-blur-md"
+        className="clip-notch relative border border-dashed bg-panel px-5 py-10 text-center backdrop-blur-md md:px-10 md:py-16"
         style={{ borderColor: "color-mix(in srgb, var(--ato-accent) 45%, transparent)" }}
       >
         <FolderPlus className="mx-auto h-12 w-12" style={{ color: "var(--ato-accent)" }} strokeWidth={1.4} />
@@ -272,13 +272,13 @@ export function HomeScreen() {
   );
 
   return (
-    <ScrollFade className="h-full overflow-y-auto px-8 py-7">
+    <ScrollFade className="h-full overflow-y-auto px-5 py-5 md:px-8 md:py-7">
       {/* header */}
       <header className="mb-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="font-mono text-[10px] tracking-[0.35em] text-dim">{dateLine.toUpperCase()}</div>
-            <h1 className="font-display mt-1 text-3xl font-bold">
+            <h1 className="font-display mt-1 text-2xl font-bold md:text-3xl">
               {displayName.trim()
                 ? <>{g.en}, {displayName.trim()}. <span style={{ color: "var(--ato-accent)" }}>{g.jp}</span></>
                 : <>{g.en}、<span style={{ color: "var(--ato-accent)" }}>{g.jp}</span></>}

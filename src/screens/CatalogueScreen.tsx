@@ -76,10 +76,10 @@ export function CatalogueScreen() {
   }
 
   return (
-    <div className="flex h-full flex-col px-8 py-7">
+    <div className="flex h-full flex-col px-5 py-5 md:px-8 md:py-7">
       <header className="mb-5 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-display mt-1 text-3xl font-bold tracking-wide">
+          <h1 className="font-display mt-1 text-2xl font-bold tracking-wide md:text-3xl">
             CATALOGUE <span className="font-jp text-lg text-dim">カタログ</span>
           </h1>
         </div>
@@ -291,37 +291,35 @@ export function CatalogueScreen() {
       </div>
 
       {ready && catalogueTracks.length > 0 && (
-        <div className="mt-4 flex h-[30vh] shrink-0 flex-col pt-2">
-          <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="mt-4 flex h-[38vh] shrink-0 flex-col pt-2 md:h-[30vh]">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex items-baseline gap-3">
-                <h2 className="font-display text-sm font-bold tracking-[0.25em]">ALL CATALOGUE TRACKS</h2>
-                <span className="font-jp text-[10px] tracking-[0.3em] text-dim">共有</span>
-              </div>
+              <h2 className="font-display whitespace-nowrap text-sm font-bold tracking-[0.25em]">ALL CATALOGUE TRACKS</h2>
+              <span className="font-jp text-[10px] tracking-[0.3em] text-dim">共有</span>
               <span className="h-px w-6 shrink-0" style={{ background: "var(--ato-border)" }} />
-              <label
-                className="clip-tag flex min-w-0 max-w-[280px] flex-1 items-center gap-2 px-3 py-1.5"
-                style={{ border: "1px solid var(--ato-border)" }}
-              >
-                <Search className="h-3 w-3 shrink-0 text-dim" />
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="SEARCH ・ 検索…"
-                  className="font-mono w-full bg-transparent text-[10px] tracking-[0.15em] outline-none placeholder:text-dim"
-                />
-              </label>
             </div>
             <button
               onClick={() => {
                 fx.impact(1);
                 playQueue(visibleTracks, 0);
               }}
-              className="clip-tag font-mono shrink-0 px-4 py-1.5 text-[9px] tracking-[0.3em] text-dim hover:text-accent"
+              className="clip-tag font-mono shrink-0 px-4 py-1.5 text-[9px] tracking-[0.3em] text-dim hover:text-accent md:order-2"
               style={{ background: "color-mix(in srgb, var(--ato-text) 6%, transparent)" }}
             >
               ▶ STREAM EVERYTHING
             </button>
+            <label
+              className="clip-tag order-last flex w-full min-w-0 items-center gap-2 px-3 py-1.5 md:order-1 md:w-auto md:max-w-[280px] md:flex-1"
+              style={{ border: "1px solid var(--ato-border)" }}
+            >
+              <Search className="h-3 w-3 shrink-0 text-dim" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="SEARCH ・ 検索…"
+                className="font-mono w-full bg-transparent text-[10px] tracking-[0.15em] outline-none placeholder:text-dim"
+              />
+            </label>
           </div>
           <VirtualTrackList tracks={visibleTracks} showAlbum className="min-h-0 flex-1" />
         </div>

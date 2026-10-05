@@ -14,6 +14,9 @@ class AudioLevels {
 
   private data = new Uint8Array(1024);
   private raf = 0;
+  /** unrouted playback (touch devices): no analyser exists, so the tick
+   *  synthesizes gentle levels while this reports "audible right now" */
+  private synthetic: (() => boolean) | null = null;
 
   attach(analyser: AnalyserNode) {
     this.analyser = analyser;
@@ -25,8 +28,16 @@ class AudioLevels {
     this.analyser = null;
   }
 
+  /** Enable fake audio-reactivity for devices that play without a graph.
+   *  The callback reports play state so the bands rest at silence when paused. */
+  setSynthetic(audible: () => boolean) {
+    this.synthetic = audible;
+    if (!this.raf) this.raf = requestAnimationFrame(this.tick);
+  }
+
   dispose() {
     this.detach();
+    this.synthetic = null;
     cancelAnimationFrame(this.raf);
     this.raf = 0;
   }
@@ -66,20 +77,35 @@ class AudioLevels {
         // punchy attack, smooth decay
         this.bands[i] = Math.max(v, this.bands[i] * 0.82);
       }
-      const avg = (a: Float32Array, from: number, to: number) => {
-        let s = 0;
-        for (let i = from; i < to; i++) s += a[i];
-        return s / (to - from);
-      };
-      const bass = avg(this.bands, 0, 6);
-      const mid = avg(this.bands, 6, 20);
-      const treble = avg(this.bands, 20, 32);
-      const level = avg(this.bands, 0, 32);
-      this.bass += (bass - this.bass) * 0.3;
-      this.mid += (mid - this.mid) * 0.3;
-      this.treble += (treble - this.treble) * 0.3;
-      this.level += (level - this.level) * 0.25;
+    } else if (this.synthetic) {
+      // unrouted fallback: slow breathing swells (amplitude-safe pacing), a
+      // soft bass lead with shimmering mids/treble, silence while paused
+      const on = this.synthetic();
+      const t = performance.now() / 1000;
+      const swell = (f: number, ph: number) => (on ? Math.max(0, Math.sin(t * f + ph)) : 0);
+      const bass = swell(0.55, 0) * 0.42;
+      const mid = swell(0.9, 2.1) * 0.22;
+      const treble = swell(1.4, 4.2) * 0.12;
+      for (let i = 0; i < 32; i++) {
+        const base = i < 8 ? bass : i < 20 ? mid : treble;
+        const jitter = on ? Math.abs(Math.sin(t * (1.7 + i * 0.31) + i * 2.1)) * 0.06 : 0;
+        const v = base + jitter;
+        this.bands[i] = Math.max(v, this.bands[i] * 0.82);
+      }
     }
+    const avg = (a: Float32Array, from: number, to: number) => {
+      let s = 0;
+      for (let i = from; i < to; i++) s += a[i];
+      return s / (to - from);
+    };
+    const bass = avg(this.bands, 0, 6);
+    const mid = avg(this.bands, 6, 20);
+    const treble = avg(this.bands, 20, 32);
+    const level = avg(this.bands, 0, 32);
+    this.bass += (bass - this.bass) * 0.3;
+    this.mid += (mid - this.mid) * 0.3;
+    this.treble += (treble - this.treble) * 0.3;
+    this.level += (level - this.level) * 0.25;
     this.raf = requestAnimationFrame(this.tick);
   };
 }

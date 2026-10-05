@@ -42,6 +42,7 @@ class AudioEngine {
   private eqNodes: BiquadFilterNode[] = [];
   private analyser: AnalyserNode | null = null;
   private gain: GainNode | null = null;
+  private keepAlive: ConstantSourceNode | null = null;
   private objectUrlA: string | null = null;
   private objectUrlB: string | null = null;
   private nextObjectUrl: string | null = null;
@@ -96,6 +97,15 @@ class AudioEngine {
     this.setVolume(0.3);
     this.bindElementEvents(this.elA);
     this.bindElementEvents(this.elB);
+    // returning to the app must resurrect the graph: mobile browsers suspend
+    // the context on background and do not reliably resume it themselves
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible" && this.ctx?.state === "suspended") {
+          void this.ctx.resume().catch(() => {});
+        }
+      });
+    }
   }
 
   private static makeElement(): HTMLAudioElement {
@@ -106,6 +116,30 @@ class AudioEngine {
     el.crossOrigin = "anonymous";
     return el;
   }
+
+  /**
+   * Whether the media elements may be routed through Web Audio. Decided ONCE:
+   * createMediaElementSource permanently re-routes an element into the graph,
+   * so this can never flip back. Touch-primary devices stay unrouted —
+   * backgrounded mobile browsers distort Web-Audio-routed playback (Chromium
+   * SilentSinkSuspender/resampler bugs) and iOS Safari stops it outright,
+   * while a plain element keeps the OS media-session path. Visualizers fall
+   * back to synthetic levels there (see AudioLevels.setSynthetic).
+   */
+  static graphAllowed(): boolean {
+    if (AudioEngine.graphDecision !== null) return AudioEngine.graphDecision;
+    let allowed = true;
+    try {
+      const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
+      const noHover = window.matchMedia?.("(hover: none)").matches ?? false;
+      if (coarse && noHover) allowed = false;
+    } catch {
+      allowed = true;
+    }
+    AudioEngine.graphDecision = allowed;
+    return allowed;
+  }
+  private static graphDecision: boolean | null = null;
 
   /** Only the active element drives engine state: the idle one is fading in/out. */
   private bindElementEvents(el: HTMLAudioElement) {
@@ -189,6 +223,11 @@ class AudioEngine {
 
   private ensureGraph() {
     if (this.ctx) return;
+    if (!AudioEngine.graphAllowed()) {
+      // unrouted playback: native element all the way, visuals go synthetic
+      audioLevels.setSynthetic(() => !this.el.paused);
+      return;
+    }
     try {
       const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new Ctx();
@@ -210,9 +249,19 @@ class AudioEngine {
         node.connect(this.eqNodes[i]);
         node = this.eqNodes[i];
       }
+      // the analyser is a PARALLEL TAP off the EQ output, never in series:
+      // fewer per-sample stages behind backgrounded playback, and the
+      // analyser cannot stall the audible path (MDN: it works unconnected)
       node.connect(this.analyser);
-      this.analyser.connect(this.gain);
+      node.connect(this.gain);
       this.gain.connect(this.ctx.destination);
+      // inaudible keep-alive (-100dBFS): Chromium's SilentSinkSuspender demotes
+      // the output device when it thinks the context is silent, which garbles
+      // backgrounded playback once the sink is restored — keep it never-silent
+      this.keepAlive = this.ctx.createConstantSource();
+      this.keepAlive.offset.value = 0.00001;
+      this.keepAlive.connect(this.ctx.destination);
+      this.keepAlive.start();
 
       this.connectElement(this.elA);
       audioLevels.attach(this.analyser);
@@ -220,6 +269,7 @@ class AudioEngine {
     } catch (e) {
       console.warn("AudioEngine: graph init failed, falling back to plain playback", e);
       this.ctx = null;
+      audioLevels.setSynthetic(() => !this.el.paused);
     }
   }
 
@@ -834,6 +884,13 @@ class AudioEngine {
   private fadeTimers = new Map<HTMLAudioElement, number>();
 
   private rampVolume(el: HTMLAudioElement, from: number, to: number, ms: number, onDone?: () => void) {
+    // a hidden tab throttles setInterval to ≥1s: the 40ms fade would stretch
+    // into a audible drift, so hidden ramps land instantly instead
+    if (typeof document !== "undefined" && document.hidden) {
+      el.volume = Math.max(0, Math.min(1, to));
+      onDone?.();
+      return;
+    }
     const prev = this.fadeTimers.get(el);
     if (prev != null) window.clearInterval(prev);
     el.volume = Math.max(0, Math.min(1, from));
@@ -1008,3 +1065,8 @@ class AudioEngine {
 }
 
 export const engine = new AudioEngine();
+
+/** Whether this device plays through the Web Audio graph (EQ, smart volume,
+ *  live FFT). Touch-primary devices play unrouted for reliable background
+ *  audio; Settings hides graph-only controls there. */
+export const audioGraphSupported = () => AudioEngine.graphAllowed();

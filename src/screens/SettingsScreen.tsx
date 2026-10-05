@@ -5,7 +5,7 @@ import { SKINS, EQ_APPLIED_LABEL } from "@/skins/registry";
 import { useSkin } from "@/skins/SkinProvider";
 import { ScrollFade } from "@/ui/kit/ScrollFade";
 import { MenuSelect } from "@/ui/kit/MenuSelect";
-import { engine, EQ_FREQS } from "@/core/audio/AudioEngine";
+import { engine, EQ_FREQS, audioGraphSupported } from "@/core/audio/AudioEngine";
 import { fx } from "@/fx/FxDirector";
 import type { FxQuality } from "@/skins/types";
 import { testConnection, normalizeCloudUrl } from "@/core/cloud/cloudService";
@@ -361,7 +361,7 @@ export function SettingsScreen() {
   }, [smartVolume]);
 
   return (
-    <ScrollFade className="mx-auto h-full max-w-3xl overflow-y-auto px-8 py-7">
+    <ScrollFade className="mx-auto h-full max-w-3xl overflow-y-auto px-5 py-5 md:px-8 md:py-7">
       <header className="mb-8">
         <div className="font-mono text-[10px] tracking-[0.35em] text-dim">SYSTEM CONFIG</div>
         <h1 className="font-display mt-1 text-3xl font-bold tracking-wide">
@@ -374,7 +374,7 @@ export function SettingsScreen() {
         <SectionHeader title="APPEARANCE" jp="スキン" />
         <div className="mb-5">
           <div className="font-mono mb-2 text-[9px] tracking-[0.3em] text-dim">NAME お名前</div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               value={nameDraft}
               onChange={(e) => setNameDraft(e.target.value)}
@@ -384,7 +384,7 @@ export function SettingsScreen() {
               }}
               placeholder="What should ATORI call you?"
               maxLength={24}
-              className="font-mono w-60 bg-transparent px-3 py-2 text-[11px] outline-none"
+              className="font-mono w-full min-w-0 bg-transparent px-3 py-2 text-[11px] outline-none sm:w-60"
               style={{ border: "1px solid var(--ato-border)" }}
             />
             <button
@@ -410,10 +410,10 @@ export function SettingsScreen() {
         </div>
         {/* theme studio entry: the film-strip switcher lives in the overlay */}
         <div
-          className="clip-notch mb-6 flex items-center justify-between gap-4 p-5 backdrop-blur-md"
+          className="clip-notch mb-6 flex flex-col items-stretch gap-4 p-5 backdrop-blur-md md:flex-row md:items-center md:justify-between"
           style={{ background: "var(--ato-panel)", border: "1px solid var(--ato-border)" }}
         >
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-4">
             <span
               className="h-14 w-24 shrink-0"
               style={{
@@ -422,7 +422,7 @@ export function SettingsScreen() {
                 border: "1px solid var(--ato-border)",
               }}
             />
-            <div>
+            <div className="min-w-0">
               <div className="font-display text-sm font-bold tracking-widest">THEME STUDIO テーマ</div>
               <div className="font-mono mt-1 text-[9px] tracking-[0.15em] text-dim">
                 {SKINS.find((s) => s.id === skinId)?.name ?? skinId}
@@ -432,7 +432,7 @@ export function SettingsScreen() {
           </div>
           <button
             onClick={() => useUi.getState().setThemeStudioOpen(true)}
-            className="clip-slash-both font-display flex shrink-0 items-center gap-2 px-5 py-2.5 text-[11px] font-bold tracking-[0.25em]"
+            className="clip-slash-both font-display flex shrink-0 items-center gap-2 self-start px-5 py-2.5 text-[11px] font-bold tracking-[0.25em] md:self-auto"
             style={{
               background: "var(--ato-accent)",
               color: "var(--ato-bg)",
@@ -506,6 +506,16 @@ export function SettingsScreen() {
       <section className="mb-10">
         <SectionHeader title="AUDIO" jp="音響" />
         <div className="clip-notch bg-panel p-5 backdrop-blur-md" style={{ border: "1px solid var(--ato-border)" }}>
+          {/* EQ + smart volume ride the Web Audio graph: touch-primary devices
+              play unrouted (reliable background audio), so the controls would
+              silently do nothing there */}
+          {!audioGraphSupported() && (
+            <p className="font-mono mb-4 text-[9px] leading-relaxed tracking-[0.2em]" style={{ color: "var(--ato-gold)" }}>
+              TOUCH DEVICE // EQ + SMART VOLUME LIVE ON THE DESKTOP AUDIO GRAPH. PLAYBACK USES THE NATIVE PATH HERE SO BACKGROUND AUDIO STAYS CLEAN.
+            </p>
+          )}
+          {audioGraphSupported() && (
+            <>
           <div className="mb-5">
             <Toggle on={eqEnabled} onChange={setEqEnabled} label="10-BAND EQUALIZER" />
           </div>
@@ -532,7 +542,7 @@ export function SettingsScreen() {
               );
             })}
           </div>
-          <div className="grid grid-cols-5 gap-x-6 gap-y-4 opacity-100 transition-opacity" style={{ opacity: eqEnabled ? 1 : 0.4 }}>
+          <div className="grid grid-cols-5 gap-x-3 gap-y-4 opacity-100 transition-opacity md:gap-x-6" style={{ opacity: eqEnabled ? 1 : 0.4 }}>
             {EQ_FREQS.map((f, i) => (
               <label key={f} className="flex flex-col items-center gap-1">
                 <span className="font-mono text-[9px] text-dim">
@@ -562,6 +572,8 @@ export function SettingsScreen() {
           <p className="font-mono mt-2 text-[9px] tracking-[0.15em] text-dim">
             {EQ_APPLIED_LABEL}
           </p>
+            </>
+          )}
           <div className="mt-5 border-t border-line pt-4">
             <Toggle on={fade} onChange={setFade} label="AUTO FADE" />
             <div className="mt-4">
@@ -585,22 +597,24 @@ export function SettingsScreen() {
             <div className="mt-4">
               <Toggle on={autoplay} onChange={setAutoplay} label="AUTOPLAY" />
             </div>
-            <div className="mt-4">
-              <Toggle on={smartVolume} onChange={setSmartVolume} label="SMART VOLUME" />
-              {smartVolume && (
-                <button
-                  onClick={() =>
-                    void engine.resetSmartVolumeLearn().then(() =>
-                      toast("Learned loudness reset: tracks re-learn as they play", "info", "リセット"),
-                    )
-                  }
-                  className="font-mono mt-3 block text-[9px] tracking-[0.25em] text-dim underline underline-offset-4 transition-colors hover:text-accent"
-                  title="Discards every learned loudness correction; smart volume re-measures as tracks play"
-                >
-                  RESET LEARNED LOUDNESS
-                </button>
-              )}
-            </div>
+            {audioGraphSupported() && (
+              <div className="mt-4">
+                <Toggle on={smartVolume} onChange={setSmartVolume} label="SMART VOLUME" />
+                {smartVolume && (
+                  <button
+                    onClick={() =>
+                      void engine.resetSmartVolumeLearn().then(() =>
+                        toast("Learned loudness reset: tracks re-learn as they play", "info", "リセット"),
+                      )
+                    }
+                    className="font-mono mt-3 block text-[9px] tracking-[0.25em] text-dim underline underline-offset-4 transition-colors hover:text-accent"
+                    title="Discards every learned loudness correction; smart volume re-measures as tracks play"
+                  >
+                    RESET LEARNED LOUDNESS
+                  </button>
+                )}
+              </div>
+            )}
             <div className="mt-4">
               <div className="font-mono mb-2 text-[9px] tracking-[0.3em] text-dim">SLEEP タイマー</div>
               <div className="flex flex-wrap items-center gap-2">

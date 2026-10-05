@@ -133,10 +133,10 @@ export function CloudScreen() {
   };
 
   return (
-    <div className="flex h-full flex-col px-8 py-7">
+    <div className="flex h-full flex-col px-5 py-5 md:px-8 md:py-7">
       <header className="mb-5 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-display mt-1 text-3xl font-bold tracking-wide">
+          <h1 className="font-display mt-1 text-2xl font-bold tracking-wide md:text-3xl">
             CLOUD <span className="font-jp text-lg text-dim">クラウド</span>
           </h1>
         </div>

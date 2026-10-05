@@ -262,7 +262,7 @@ export default function App() {
           transition={{ duration: 0.35, ease: "easeOut" }}
           style={{ pointerEvents: nowPlayingOpen ? "none" : undefined }}
         >
-          <div className="flex min-h-0 flex-1 pb-14 md:pb-0">
+          <div className="flex min-h-0 flex-1">
             <NavRail />
             <main className="relative min-w-0 flex-1">
               <Director />

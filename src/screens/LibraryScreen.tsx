@@ -210,15 +210,15 @@ export function LibraryScreen() {
   }, [filteredAlbums, albumSort]);
 
   return (
-    <div className="flex h-full flex-col px-8 py-7">
-      <header className="mb-5 flex flex-wrap items-center justify-between gap-4">
-        <h1 className="font-display text-3xl font-bold tracking-wide">
+    <div className="flex h-full flex-col px-5 py-5 md:px-8 md:py-7">
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <h1 className="font-display text-2xl font-bold tracking-wide md:text-3xl">
           LIBRARY <span className="font-jp text-lg text-dim">ライブラリ</span>
         </h1>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <button
             onClick={onImportClick}
-            className="clip-tag flex items-center gap-2 px-4 py-2"
+            className="clip-tag flex items-center gap-2 px-3 py-2 md:px-4"
             style={{
               background: "color-mix(in srgb, var(--ato-accent) 14%, transparent)",
               color: "var(--ato-accent)",
@@ -226,11 +226,11 @@ export function LibraryScreen() {
             title="Import a music folder"
           >
             <Plus className="h-3.5 w-3.5" />
-            <span className="font-mono text-[11px] font-bold tracking-[0.2em]">IMPORT</span>
+            <span className="font-mono text-[10px] font-bold tracking-[0.2em] md:text-[11px]">IMPORT</span>
           </button>
           <button
             onClick={() => setAddUrlOpen(true)}
-            className="clip-tag flex items-center gap-2 px-4 py-2"
+            className="clip-tag flex items-center gap-2 px-3 py-2 md:px-4"
             style={{
               background: "color-mix(in srgb, var(--ato-accent) 14%, transparent)",
               color: "var(--ato-accent)",
@@ -238,11 +238,11 @@ export function LibraryScreen() {
             title="Add a track from a URL (yt-dlp companion)"
           >
             <Download className="h-3.5 w-3.5" />
-            <span className="font-mono text-[11px] font-bold tracking-[0.2em]">ADD URL</span>
+            <span className="font-mono text-[10px] font-bold tracking-[0.2em] md:text-[11px]">ADD URL</span>
           </button>
           <button
             onClick={() => void rescan()}
-            className="clip-tag flex items-center gap-2 px-4 py-2"
+            className="clip-tag flex items-center gap-2 px-3 py-2 md:px-4"
             style={{
               background: "color-mix(in srgb, var(--ato-accent-2) 14%, transparent)",
               color: "var(--ato-accent-2)",
@@ -250,26 +250,26 @@ export function LibraryScreen() {
             title="Re-scan saved library folders for new/changed files"
           >
             <RefreshCw className="h-3.5 w-3.5" />
-            <span className="font-mono text-[11px] font-bold tracking-[0.2em]">RESCAN</span>
+            <span className="font-mono text-[10px] font-bold tracking-[0.2em] md:text-[11px]">RESCAN</span>
           </button>
           <DirectoryInput onFiles={(f) => void importList(f)} triggerRef={dirRef} />
           <label
-            className="clip-tag flex items-center gap-2 bg-panel px-4 py-2"
+            className="clip-tag flex w-full min-w-0 items-center gap-2 bg-panel px-3 py-2 sm:w-auto"
             style={{ border: "1px solid var(--ato-border)" }}
           >
-            <Search className="h-3.5 w-3.5 text-dim" />
+            <Search className="h-3.5 w-3.5 shrink-0 text-dim" />
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
               placeholder="SEARCH…"
-              className="font-mono w-44 bg-transparent text-[11px] tracking-[0.2em] outline-none placeholder:text-dim"
+              className="font-mono w-full min-w-0 bg-transparent text-[11px] tracking-[0.2em] outline-none placeholder:text-dim sm:w-44"
             />
           </label>
         </div>
       </header>
 
       {/* tabs */}
-      <div className="mb-5 flex shrink-0 flex-wrap gap-2">
+      <div className="no-scrollbar mb-5 flex shrink-0 items-center gap-2 overflow-x-auto md:flex-wrap">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -280,7 +280,7 @@ export function LibraryScreen() {
               setSelectedIds(new Set());
               setBatchTagOpen(false);
             }}
-            className="clip-tag px-4 py-2"
+            className="clip-tag shrink-0 px-3.5 py-2 md:px-4"
             style={{
               background:
                 tab === t.id ? "var(--ato-accent)" : "color-mix(in srgb, var(--ato-text) 6%, transparent)",
@@ -288,15 +288,15 @@ export function LibraryScreen() {
             }}
           >
             <span className="font-display text-[11px] font-bold tracking-[0.25em]">{t.label}</span>
-            <span className="font-jp ml-2 text-[9px] opacity-70">{t.jp}</span>
+            <span className="font-jp ml-2 hidden text-[9px] opacity-70 sm:inline">{t.jp}</span>
           </button>
         ))}
       </div>
 
       {/* library mode: all / local / cloud / offline-cached */}
       {tab !== "playlists" && (
-        <div className="mb-5 flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[10px] font-bold tracking-[0.3em]" style={{ color: "var(--ato-text)" }}>
+        <div className="no-scrollbar mb-5 flex shrink-0 items-center gap-2 overflow-x-auto md:flex-wrap">
+          <span className="font-mono shrink-0 text-[10px] font-bold tracking-[0.3em]" style={{ color: "var(--ato-text)" }}>
             MODE <span className="font-jp text-[9px] font-normal opacity-70">種別</span>
           </span>
           {SCOPES.map((s) => {
@@ -305,7 +305,7 @@ export function LibraryScreen() {
               <button
                 key={s.id}
                 onClick={() => setScope(s.id)}
-                className="clip-tag px-3.5 py-1.5 transition-all"
+                className="clip-tag shrink-0 px-3.5 py-1.5 transition-all"
                 style={{
                   background: active
                     ? "var(--ato-accent)"
@@ -324,8 +324,8 @@ export function LibraryScreen() {
 
       {/* popular tags: capped at POPULAR_TAG_LIMIT chips; right-click pins one as a playlist */}
       {tagStats.length > 0 && tab !== "playlists" && (
-        <div className="mb-5 flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[10px] font-bold tracking-[0.3em]" style={{ color: "var(--ato-text)" }}>
+        <div className="no-scrollbar mb-5 flex shrink-0 items-center gap-2 overflow-x-auto md:flex-wrap">
+          <span className="font-mono shrink-0 text-[10px] font-bold tracking-[0.3em]" style={{ color: "var(--ato-text)" }}>
             TAGS <span className="font-jp text-[9px] font-normal opacity-70">タグ</span>
           </span>
           {tagStats.slice(0, POPULAR_TAG_LIMIT).map((s) => {
@@ -338,7 +338,7 @@ export function LibraryScreen() {
                   e.preventDefault();
                   showTagMenu(e, s, tracks);
                 }}
-                className="clip-tag px-3.5 py-1.5 transition-all"
+                className="clip-tag shrink-0 px-3.5 py-1.5 transition-all"
                 style={{
                   background: active
                     ? "var(--ato-accent-2)"
@@ -762,7 +762,7 @@ function CloudPlaylistsPane() {
                       toast(`Deleted ${pl.name}`, "info", "削除済み");
                     })();
                   }}
-                  className="p-1 text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent"
+                  className="p-1 text-dim opacity-100 transition-opacity hover:text-accent md:opacity-0 md:group-hover:opacity-100"
                   aria-label={`Delete ${pl.name}`}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -850,7 +850,9 @@ function SmartPlaylistsSection() {
         className="clip-tag font-mono mb-4 flex w-fit items-center gap-2 px-3 py-1.5 text-[9px] font-bold tracking-[0.25em] text-dim hover:text-accent"
         style={{ background: "color-mix(in srgb, var(--ato-accent-2) 10%, transparent)", color: "var(--ato-accent-2)" }}
       >
-        <Zap className="h-3 w-3" /> NEW SMART PLAYLIST: RULES THAT TRACK THE LIBRARY
+        <Zap className="h-3 w-3 shrink-0" />
+        <span className="hidden sm:inline">NEW SMART PLAYLIST: RULES THAT TRACK THE LIBRARY</span>
+        <span className="sm:hidden">NEW SMART PLAYLIST</span>
       </button>
     );
   }
@@ -1504,7 +1506,7 @@ function PlaylistListRow({
           e.stopPropagation();
           onDelete();
         }}
-        className="p-1 text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent"
+        className="p-1 text-dim opacity-100 transition-opacity hover:text-accent md:opacity-0 md:group-hover:opacity-100"
         aria-label={`Delete ${playlist.name}`}
       >
         <Trash2 className="h-3.5 w-3.5" />

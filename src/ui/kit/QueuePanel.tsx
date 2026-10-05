@@ -79,7 +79,7 @@ export function QueuePanel() {
           <motion.aside
             key={wide ? "queue-phonograph" : "queue-panel"}
             className={`fixed top-0 right-0 bottom-0 z-[61] flex flex-col overflow-hidden bg-panel backdrop-blur-xl @container ${
-              wide ? "w-[min(920px,92vw)]" : "w-[380px]"
+              wide ? "w-[min(920px,92vw)]" : "w-[min(380px,100vw)]"
             }`}
             style={{ borderLeft: "1px solid var(--ato-border)", boxShadow: "-24px 0 60px rgba(0,0,0,.5)" }}
             initial={{ x: wide ? 960 : 400, skewX: -5 }}
@@ -265,7 +265,7 @@ function QueueRow({
           e.stopPropagation();
           onRemove();
         }}
-        className="p-1 text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent"
+        className="p-1 text-dim opacity-100 transition-opacity hover:text-accent md:opacity-0 md:group-hover:opacity-100"
         aria-label={`Remove ${track.title} from queue`}
       >
         <X className="h-4 w-4" />

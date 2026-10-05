@@ -81,7 +81,7 @@ export function AlbumCard({ album, source = "local" }: { album: AlbumInfo; sourc
     <button
       onClick={() => navigate("album", album.key, source)}
       onContextMenu={(e) => showAlbumMenu(e, album, source)}
-      className="group w-40 shrink-0 text-left"
+      className="group w-36 shrink-0 text-left md:w-40"
       title={`${album.name} · ${album.artist}`}
     >
       <div className="transition-transform duration-300 ease-out group-hover:-translate-y-1.5">
@@ -89,7 +89,7 @@ export function AlbumCard({ album, source = "local" }: { album: AlbumInfo; sourc
           coverKey={album.coverKey}
           title={album.name}
           grade={album.grade}
-          className="h-40 w-40 shadow-lg"
+          className="h-36 w-36 shadow-lg md:h-40 md:w-40"
         />
       </div>
       <div className="mt-2 flex items-center gap-1.5">
@@ -224,7 +224,7 @@ export function TrackRow({
             e.stopPropagation();
             onRemove(track);
           }}
-          className="p-1 text-dim opacity-0 transition-opacity group-hover:opacity-100 hover:text-accent"
+          className="p-1 text-dim opacity-100 transition-opacity hover:text-accent md:opacity-0 md:group-hover:opacity-100"
           title="Remove"
           aria-label={`Remove ${track.title}`}
         >

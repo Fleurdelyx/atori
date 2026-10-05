@@ -157,7 +157,7 @@ function CoverStage({ open, flat = false }: { open: boolean; flat?: boolean }) {
   if (!current) return null;
   if (flat) {
     return (
-      <motion.div layoutId={open ? "np-cover" : undefined} className="relative mx-auto aspect-square w-full max-w-[320px]">
+      <motion.div layoutId={open ? "np-cover" : undefined} className="relative mx-auto aspect-square w-full max-w-[min(64vw,280px)] md:max-w-[320px]">
         <HoloCover coverKey={current.coverKey} title={current.title} grade={current.grade} className="h-full w-full" />
       </motion.div>
     );
@@ -165,7 +165,7 @@ function CoverStage({ open, flat = false }: { open: boolean; flat?: boolean }) {
   return (
     <motion.div
       layoutId={open ? "np-cover" : undefined}
-      className="relative mx-auto aspect-square w-full max-w-[380px]"
+      className="relative mx-auto aspect-square w-full max-w-[min(72vw,320px)] md:max-w-[380px]"
       style={{ perspective: 1000 }}
       onPointerMove={(e) => {
         const r = e.currentTarget.getBoundingClientRect();
@@ -211,7 +211,7 @@ function Controls({ flat = false, lead, trail }: { flat?: boolean; lead?: ReactN
   const liked = useFavorites((s) => (current ? s.keys.includes(current.path) : false));
   const toggleLiked = useFavorites((s) => s.toggle);
 
-  const btn = "p-2.5 text-dim transition-colors hover:text-accent";
+  const btn = "p-2 text-dim transition-colors hover:text-accent md:p-2.5";
   // click feedback: the icon remounts and pops so the press reads instantly
   // (no hovering away to check whether the toggle color changed)
   const [shufflePops, setShufflePops] = useState(0);
@@ -229,7 +229,7 @@ function Controls({ flat = false, lead, trail }: { flat?: boolean; lead?: ReactN
       className="grid grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)] items-center"
       data-testid="np-controls"
     >
-      <div className="flex items-center gap-3 justify-self-start">
+      <div className="flex items-center gap-1.5 justify-self-start md:gap-3">
         {lead}
         {current && (
           <button
@@ -256,7 +256,7 @@ function Controls({ flat = false, lead, trail }: { flat?: boolean; lead?: ReactN
           </motion.span>
         </button>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5 md:gap-3">
         <button aria-label="Previous" className={btn} onClick={prev}>
           <SkipBack className="h-7 w-7" />
         </button>
@@ -284,21 +284,21 @@ function Controls({ flat = false, lead, trail }: { flat?: boolean; lead?: ReactN
           onClick={() => {
             toggle();
           }}
-          className="clip-slash-both flex h-16 w-24 items-center justify-center"
+          className="clip-slash-both flex h-16 w-16 items-center justify-center md:w-24"
           style={{
             background: "var(--ato-accent)",
             color: "var(--ato-bg)",
             boxShadow: "0 0 40px color-mix(in srgb, var(--ato-accent) 50%, transparent)",
           }}
         >
-          {isPlaying ? <Pause className="h-8 w-8" /> : <Play className="ml-1 h-8 w-8" />}
+          {isPlaying ? <Pause className="h-8 w-8" /> : <Play className="h-8 w-8" />}
         </button>
       )}
       <button aria-label="Next" className={btn} onClick={next}>
         <SkipForward className="h-7 w-7" />
       </button>
       </div>
-      <div className="flex items-center gap-3 justify-self-end">
+      <div className="flex items-center gap-1.5 justify-self-end md:gap-3">
         <button
           aria-label={`Repeat ${repeat}`}
           className={btn}
@@ -315,7 +315,11 @@ function Controls({ flat = false, lead, trail }: { flat?: boolean; lead?: ReactN
         <button aria-label="Queue" className={btn} onClick={() => useUi.getState().setQueueOpen(true)}>
           <ListMusic className="h-5 w-5" />
         </button>
-        {trail}
+        {/* trail slots (theatre fullscreen) need ~40px: phones double-tap the
+            video instead, keeping the transport inside the viewport */}
+        {trail && (
+          <span className="hidden items-center md:flex">{trail}</span>
+        )}
       </div>
     </div>
   );
@@ -456,7 +460,7 @@ export function NowPlayingOverlay() {
           )}
 
           {/* top bar */}
-          <div className="relative z-10 flex items-center justify-between px-6 py-4">
+          <div className="relative z-10 flex items-center justify-between gap-2 px-4 py-3 md:px-6 md:py-4">
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
@@ -487,7 +491,7 @@ export function NowPlayingOverlay() {
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 md:gap-3">
               {hasVisual && (
                 <button
                   onClick={() => setTheatre(!theatre)}
@@ -518,7 +522,8 @@ export function NowPlayingOverlay() {
               >
                 FLAT {flat ? "✓" : ""}
               </button>
-              <div className="font-jp text-[10px] tracking-[0.6em] text-dim opacity-70">再生中 // NOW PLAYING</div>
+              {/* the label needs ~200px: below md the pills say it all */}
+              <div className="font-jp hidden text-[10px] tracking-[0.6em] text-dim opacity-70 md:block">再生中 // NOW PLAYING</div>
             </div>
           </div>
 
@@ -528,7 +533,7 @@ export function NowPlayingOverlay() {
                The stage supports true fullscreen (button or double-click). */
             <main
               ref={stageRef}
-              className={`relative z-10 flex min-h-0 flex-1 flex-col px-6 pb-10 ${isFullscreen ? "bg-black" : ""}`}
+              className={`relative z-10 flex min-h-0 flex-1 flex-col px-4 pb-6 md:px-6 md:pb-10 ${isFullscreen ? "bg-black" : ""}`}
             >
               {/* absolute-fill keeps the video's box definite at any nesting
                   depth: percentage max-heights fail in this flex chain and
@@ -594,8 +599,8 @@ export function NowPlayingOverlay() {
             </main>
           ) : current ? (
             flat ? (
-              <main className="relative z-10 grid min-h-0 flex-1 place-items-center overflow-y-auto px-6 pt-4 pb-10">
-                <div className="flex w-full max-w-md flex-col items-center text-center">
+            <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pt-4 pb-8 md:grid md:place-items-center md:px-6 md:pb-10 lg:px-[5vw]">
+                <div className="my-auto flex w-full max-w-md flex-col items-center text-center">
                   {hasVisual ? (
                     <TrackVisual track={current} className="aspect-square w-full max-w-[320px] object-cover" />
                   ) : (
@@ -653,10 +658,11 @@ export function NowPlayingOverlay() {
                 </div>
               </main>
             ) : (
-            <main className="relative z-10 grid min-h-0 flex-1 place-items-center overflow-y-auto px-[5vw] py-4">
+            <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4 md:grid md:place-items-center md:px-[5vw]">
               <div
-                className="grid w-full max-w-6xl items-center gap-12 md:grid-cols-[minmax(280px,40%)_1fr]"
-                style={hasVisual ? { gridTemplateColumns: "minmax(240px,32%) 1fr minmax(220px,26%)" } : undefined}
+                className={`my-auto grid w-full max-w-6xl items-center gap-6 md:grid-cols-[minmax(280px,40%)_1fr] md:gap-12 ${
+                  hasVisual ? "md:[grid-template-columns:minmax(240px,32%)_1fr_minmax(220px,26%)]" : ""
+                }`}
               >
                 <CoverStage open={open} />
                 <div className="min-w-0">
@@ -741,9 +747,10 @@ export function NowPlayingOverlay() {
             <EmptyStage />
           )}
 
-          {/* bottom spectrum strip: hidden in flat mode (nothing should move) */}
+          {/* bottom spectrum strip: hidden in flat mode (nothing should move)
+              and on phones (the overlay needs the rows; the shader reacts too) */}
           {!flat && (
-            <div className="relative z-10 px-10 pb-6">
+            <div className="relative z-10 hidden px-10 pb-6 md:block">
               <SpectrumBars className="mx-auto max-w-3xl opacity-80" height={44} />
             </div>
           )}

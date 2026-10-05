@@ -237,7 +237,7 @@ export function MiniPlayer() {
         </div>
       )}
       <ProgressLine />
-      <div className="flex h-[76px] items-center gap-4 px-5">
+      <div className="flex h-[60px] items-center gap-2 px-3 md:h-[76px] md:gap-4 md:px-5">
         {current ? (
           <button className="flex min-w-0 items-center gap-3 text-left" onClick={() => setNowPlayingOpen(true)}>
             <span className="relative shrink-0">
@@ -254,14 +254,14 @@ export function MiniPlayer() {
                 className="absolute -right-1.5 -bottom-1.5 hidden drop-shadow-[0_1px_3px_rgba(0,0,0,0.55)] md:flex"
               />
             </span>
-            <span className="flex w-44 min-w-0 flex-col sm:w-60 lg:w-80">
+            <span className="flex w-28 min-w-0 flex-col sm:w-60 lg:w-80">
               <Marquee text={current.title} className="text-sm font-semibold" />
               <span className="truncate text-xs text-dim">{current.artist}</span>
             </span>
           </button>
         ) : (
-          <div className="font-mono min-w-0 text-[11px] tracking-[0.25em] text-dim">
-            NOTHING PLAYING // キューは空
+          <div className="font-mono min-w-0 truncate text-[11px] tracking-[0.25em] text-dim">
+            NOTHING PLAYING<span className="hidden md:inline"> // キューは空</span>
           </div>
         )}
 
@@ -272,7 +272,7 @@ export function MiniPlayer() {
               setShufflePops((n) => n + 1);
               toggleShuffle();
             }}
-            className="p-2 text-dim hover:text-accent"
+            className="hidden p-2 text-dim hover:text-accent md:block"
             style={{ color: shuffle ? "var(--ato-accent)" : undefined }}
             title="Shuffle"
           >
@@ -305,7 +305,7 @@ export function MiniPlayer() {
               setRepeatPops((n) => n + 1);
               cycleRepeat();
             }}
-            className="p-2 text-dim hover:text-accent"
+            className="hidden p-2 text-dim hover:text-accent md:block"
             style={{ color: repeat !== "off" ? "var(--ato-accent)" : undefined }}
             title={`Repeat: ${repeat}`}
           >
