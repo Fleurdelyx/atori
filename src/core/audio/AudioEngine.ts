@@ -700,13 +700,17 @@ class AudioEngine {
 
   private updateMediaSession(track: TrackMeta) {
     if (!("mediaSession" in navigator)) return;
-    const artwork = track.coverKey ? this.coverResolver(track.coverKey) : null;
+    // the lock-screen notification is rendered by the SYSTEM process: it can
+    // only fetch http(s) or data: URLs — the page-internal blob: URLs the
+    // cover cache hands out render as nothing. Metadata goes out immediately
+    // (title/artist first) and upgradeArtwork attaches fetchable art.
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title,
       artist: track.artist,
       album: track.album,
-      artwork: artwork ? [{ src: artwork, sizes: "512x512" }] : [],
+      artwork: [],
     });
+    if (track.coverKey) void this.upgradeArtwork(track);
     // action set is guarded: unsupported actions throw on some platforms
     const on = (action: MediaSessionAction, fn: MediaSessionActionHandler) => {
       try {
@@ -745,6 +749,41 @@ class AudioEngine {
       });
     } catch {
       /* invalid state races (duration shrank mid-seek): next tick fixes it */
+    }
+  }
+
+  /** Attach artwork the system UI can actually load: cloud/catalogue covers
+   *  stream over https, local covers are re-encoded to a data: URL (the
+   *  cache's blob: URLs are invisible outside the page). Best-effort: the
+   *  notification already shows with title/artist before this lands. */
+  private async upgradeArtwork(track: TrackMeta) {
+    const stillCurrent = () =>
+      "mediaSession" in navigator && navigator.mediaSession.metadata?.title === track.title;
+    try {
+      const { coverStreamUrl } = await import("@/core/cloud/cloudService");
+      let src = track.coverKey ? coverStreamUrl(track.coverKey) : null;
+      if (!src) {
+        const { loadCoverUrl } = await import("@/core/library/coverCache");
+        const blobUrl = await loadCoverUrl(track.coverKey);
+        if (!blobUrl) return;
+        const blob = await (await fetch(blobUrl)).blob();
+        src = await new Promise<string | null>((res) => {
+          const reader = new FileReader();
+          reader.onload = () => res(String(reader.result));
+          reader.onerror = () => res(null);
+          reader.readAsDataURL(blob);
+        });
+        if (!src) return;
+      }
+      if (!stillCurrent()) return;
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        artwork: [{ src, sizes: "512x512", type: src.startsWith("data:image/") ? undefined : "image/png" }],
+      });
+    } catch {
+      /* artwork is cosmetic: the notification works without it */
     }
   }
 
