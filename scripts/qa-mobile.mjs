@@ -159,6 +159,14 @@ await clickNav("CATALOGUE");
 await sleep(4000);
 await shot("10-catalogue");
 
+// expand the first catalogue playlist (member rows: art + two-line text)
+await page.evaluate(() => {
+  const row = [...document.querySelectorAll("main div[role='button']")].find((n) => (n.textContent ?? "").includes("TRACKS"));
+  row?.click();
+});
+await sleep(1200);
+await shot("10b-catalogue-playlist-open");
+
 // 6. SETTINGS (tall page, several shots)
 await clickNav("SETTINGS");
 await sleep(1500);

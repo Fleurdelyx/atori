@@ -170,13 +170,15 @@ export function TrackRow({
         )}
         {!playing && !selected && <Play className="hidden h-3.5 w-3.5 text-accent group-hover:block" />}
       </span>
-      {/* like sits between the number and the art (its own grid column) */}
+      {/* like sits between the number and the art (its own grid column);
+          phones long-press for the menu instead: the column would only
+          waste leading width */}
       <button
         onClick={(e) => {
           e.stopPropagation();
           toggleSaved(track.path);
         }}
-        className={`shrink-0 text-center transition-opacity ${saved ? "" : "opacity-0 group-hover:opacity-100"}`}
+        className={`hidden shrink-0 text-center transition-opacity md:block ${saved ? "" : "opacity-0 group-hover:opacity-100"}`}
         title={saved ? "Liked" : "Like"}
         aria-label={saved ? `Remove ${track.title} from liked` : `Like ${track.title}`}
       >

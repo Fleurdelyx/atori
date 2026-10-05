@@ -14,7 +14,7 @@ import { fx } from "@/fx/FxDirector";
 import { toast } from "@/state/toastStore";
 import { confirm } from "@/state/confirmStore";
 import { showContextMenu, type ContextMenuItem } from "@/state/contextMenuStore";
-import { AlbumCard, MediaRow } from "@/ui/components";
+import { AlbumCard, CoverThumb, MediaRow } from "@/ui/components";
 import { VirtualTrackList } from "@/ui/kit/VirtualTrackList";
 import { CatalogueUploadPanel } from "@/ui/kit/CatalogueUploadPanel";
 import { CataloguePlaylistCover } from "@/ui/kit/CataloguePlaylistCover";
@@ -603,12 +603,16 @@ function CataloguePlaylistRow({
                   e.stopPropagation();
                   void showTrackMenu(e, t, members);
                 }}
-                className="group/row flex cursor-pointer items-center gap-2 py-1"
+                className="group/row flex min-h-11 cursor-pointer items-center gap-3 py-1.5 md:min-h-0 md:gap-2 md:py-1"
               >
                 <span className="font-mono w-5 shrink-0 text-right text-[10px] text-dim">{String(i + 1).padStart(2, "0")}</span>
+                <CoverThumb track={t} className="h-9 w-9 shrink-0" />
                 <MemberHeart track={t} />
-                <span className="min-w-0 flex-1 truncate text-[12px] group-hover/row:text-accent">
-                  {t.title} <span className="text-dim opacity-60">· {t.artist}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] group-hover/row:text-accent md:text-[12px]">
+                    {t.title}
+                  </span>
+                  <span className="block truncate text-[11px] text-dim opacity-80">{t.artist}</span>
                 </span>
                 {isAdmin && (
                   <button
@@ -616,10 +620,10 @@ function CataloguePlaylistRow({
                       e.stopPropagation();
                       useCataloguePlaylists.getState().removeTrack(id, t.path);
                     }}
-                    className="p-0.5 text-dim opacity-0 transition-opacity group-hover/row:opacity-100 hover:text-accent"
+                    className="p-1.5 text-dim opacity-100 transition-opacity hover:text-accent md:opacity-0 md:group-hover/row:opacity-100"
                     aria-label={`Remove ${t.title}`}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    <X className="h-4 w-4" />
                   </button>
                 )}
               </div>
@@ -732,12 +736,12 @@ function MemberHeart({ track }: { track: TrackMeta }) {
         e.stopPropagation();
         toggle(track.path);
       }}
-      className={`shrink-0 p-0.5 transition-opacity ${liked ? "" : "opacity-0 group-hover/row:opacity-100"}`}
+      className={`hidden shrink-0 p-0.5 transition-opacity md:block ${liked ? "" : "opacity-0 group-hover/row:opacity-100"}`}
       title={liked ? "Liked" : "Like"}
       aria-label={liked ? `Remove ${track.title} from liked` : `Like ${track.title}`}
     >
       <Heart
-        className="h-3 w-3"
+        className="h-3.5 w-3.5"
         style={{ color: liked ? "var(--ato-accent)" : undefined }}
         fill={liked ? "var(--ato-accent)" : "none"}
       />
