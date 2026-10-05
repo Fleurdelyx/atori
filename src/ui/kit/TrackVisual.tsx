@@ -23,6 +23,47 @@ export function TrackVisual({
   const [source, setSource] = useState<VisualSource | null>(null);
   const [failed, setFailed] = useState(false);
   const mediaRef = useRef<HTMLVideoElement>(null);
+  const stalledSince = useRef<number | null>(null);
+  const revived = useRef(false);
+
+  // phones stall the second parallel stream easily (the audio element holds
+  // the same file open): one reload + re-seek per source before giving up
+  useEffect(() => {
+    revived.current = false;
+    stalledSince.current = null;
+  }, [source]);
+  useEffect(() => {
+    const el = mediaRef.current;
+    if (!el || !source || source.kind === "gif" || !isPlaying) return;
+    const onStall = () => {
+      if (stalledSince.current == null) stalledSince.current = Date.now();
+    };
+    const onProgress = () => {
+      stalledSince.current = null;
+    };
+    const id = window.setInterval(() => {
+      const since = stalledSince.current;
+      if (since == null || Date.now() - since < 4000) return;
+      stalledSince.current = null;
+      if (revived.current || el.readyState >= 3) return;
+      revived.current = true;
+      const at = engine.el.currentTime || 0;
+      el.load();
+      el.currentTime = at;
+      void el.play().catch(() => {});
+    }, 1000);
+    el.addEventListener("stalled", onStall);
+    el.addEventListener("waiting", onStall);
+    el.addEventListener("playing", onProgress);
+    el.addEventListener("progress", onProgress);
+    return () => {
+      window.clearInterval(id);
+      el.removeEventListener("stalled", onStall);
+      el.removeEventListener("waiting", onStall);
+      el.removeEventListener("playing", onProgress);
+      el.removeEventListener("progress", onProgress);
+    };
+  }, [isPlaying, source]);
 
   // resolve the source per track
   useEffect(() => {
@@ -92,6 +133,10 @@ export function TrackVisual({
       src={source.url}
       muted
       playsInline
+      // same CORS mode as the audio element's stream: lets the HTTP cache
+      // dedupe the two parallel range streams of one file (big on metered data)
+      crossOrigin="anonymous"
+      preload="auto"
       loop={source.loop}
       autoPlay={isPlaying}
       onError={() => setFailed(true)}

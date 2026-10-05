@@ -201,6 +201,7 @@ export function MiniBubble() {
                   src={visual.url}
                   muted
                   playsInline
+                  crossOrigin="anonymous"
                   loop={visual.loop}
                   className="h-full w-full object-cover"
                 />
