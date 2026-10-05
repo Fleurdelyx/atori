@@ -35,6 +35,20 @@ export function supportsDirectoryPicker(): boolean {
   return typeof (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker === "function";
 }
 
+/** Touch-primary device (phone/tablet): folder pickers and webkitdirectory
+ *  inputs are unavailable or dead ends there, so IMPORT falls back to a
+ *  plain multi-file picker. Same test AudioEngine uses for the audio graph. */
+export function isTouchPrimary(): boolean {
+  try {
+    return (
+      window.matchMedia?.("(pointer: coarse)").matches === true &&
+      window.matchMedia?.("(hover: none)").matches === true
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function pickDirectory(): Promise<FileSystemDirectoryHandle | null> {
   const picker = (window as unknown as { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> })
     .showDirectoryPicker;

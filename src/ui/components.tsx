@@ -204,7 +204,10 @@ export function TrackRow({
             </span>
           )}
         </span>
-        <span className="truncate text-[11px] text-dim">{track.artist}</span>
+        {/* comma-separated edits split into artists[]: show the full list */}
+        <span className="truncate text-[11px] text-dim">
+          {track.artists.length > 1 ? track.artists.join(", ") : track.artist}
+        </span>
       </span>
       {showAlbum && <span className="hidden truncate text-[11px] text-dim md:block">{track.album}</span>}
       <span className="flex items-center gap-1.5">

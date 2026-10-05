@@ -10,7 +10,7 @@ import { toast } from "@/state/toastStore";
 
 function splitList(raw: string): string[] {
   return raw
-    .split(/[,、]/)
+    .split(/[,、，]/)
     .map((s) => s.trim())
     .filter(Boolean);
 }

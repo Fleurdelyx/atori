@@ -258,7 +258,9 @@ function QueueRow({
       )}
       <span className="flex min-w-0 flex-col">
         <span className="truncate text-[13px] font-medium">{track.title}</span>
-        <span className="truncate text-[11px] text-dim">{track.artist}</span>
+        <span className="truncate text-[11px] text-dim">
+          {track.artists.length > 1 ? track.artists.join(", ") : track.artist}
+        </span>
       </span>
       <button
         onClick={(e) => {

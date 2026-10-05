@@ -11,7 +11,7 @@ import { toast } from "@/state/toastStore";
 /** comma / 、 separated free-text list (slashes stay inside single names here) */
 function splitList(raw: string): string[] {
   return raw
-    .split(/[,、]/)
+    .split(/[,、，]/)
     .map((s) => s.trim())
     .filter(Boolean);
 }
@@ -52,6 +52,12 @@ export function EditTrackPanel() {
   const open = editTrackId !== null && !!track;
   const save = () => {
     if (!track) return;
+    // catalogue tracks are curated on the server: their manifest entry lives
+    // in the shared listing, so a local save would vanish on the next merge
+    if (track.path.startsWith("catalogue/")) {
+      toast("Catalogue metadata is curated by the server admin: this edit can't be saved", "info", "カタログ");
+      return;
+    }
     // blank fields save as "Unknown" rather than keeping the previous value
     const artistList = splitList(artists);
     const parsedYear = parseInt(year, 10);

@@ -612,7 +612,9 @@ function CataloguePlaylistRow({
                   <span className="block truncate text-[13px] group-hover/row:text-accent md:text-[12px]">
                     {t.title}
                   </span>
-                  <span className="block truncate text-[11px] text-dim opacity-80">{t.artist}</span>
+                  <span className="block truncate text-[11px] text-dim opacity-80">
+                    {t.artists.length > 1 ? t.artists.join(", ") : t.artist}
+                  </span>
                 </span>
                 {isAdmin && (
                   <button

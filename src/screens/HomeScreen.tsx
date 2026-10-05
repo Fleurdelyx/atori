@@ -5,7 +5,7 @@ import { useUi } from "@/state/uiStore";
 import { AlbumCard, DirectoryInput, MediaRow, TrackRow } from "@/ui/components";
 import { ScrollFade } from "@/ui/kit/ScrollFade";
 import { useImporter } from "@/hooks/useImporter";
-import { supportsDirectoryPicker } from "@/core/library/importService";
+import { isTouchPrimary, supportsDirectoryPicker } from "@/core/library/importService";
 import { matchTrack } from "@/core/library/search";
 import { usePlaylists } from "@/core/library/playlists";
 import { useCloudPlaylists } from "@/core/cloud/playlistStore";
@@ -244,12 +244,15 @@ export function HomeScreen() {
   const displayName = useUi((s) => s.displayName);
   const { progress, importDir, importList } = useImporter();
   const dirRef = useRef<HTMLInputElement>(null);
+  const filesRef = useRef<HTMLInputElement>(null);
   const g = greeting();
 
-  // IMPORT button: native folder picker where available, universal input elsewhere
+  // IMPORT button: native folder picker where available; phones get a plain
+  // multi-file picker (webkitdirectory is a dead end there)
   const onImportClick = () => {
     fx.impact(0.8);
     if (supportsDirectoryPicker()) void importDir();
+    else if (isTouchPrimary()) filesRef.current?.click();
     else dirRef.current?.click();
   };
 
@@ -292,6 +295,18 @@ export function HomeScreen() {
           <>
             <EmptyLibrary onImport={onImportClick} progress={progress} />
             <DirectoryInput onFiles={(f) => void importList(f)} triggerRef={dirRef} />
+            <input
+              ref={filesRef}
+              type="file"
+              multiple
+              accept="audio/*,.mp3,.flac,.wav,.ogg,.opus,.m4a,.aac,.wv,.aiff"
+              className="hidden"
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) void importList(files);
+                e.target.value = "";
+              }}
+            />
           </>
       ) : (
         <>

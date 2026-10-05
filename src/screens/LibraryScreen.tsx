@@ -23,7 +23,7 @@ import { VirtualTrackList } from "@/ui/kit/VirtualTrackList";
 import { AddUrlPanel } from "@/ui/kit/AddUrlPanel";
 import { PlaylistCover } from "@/ui/kit/PlaylistCover";
 import { PictureCropper } from "@/ui/kit/PictureCropper";
-import { supportsDirectoryPicker } from "@/core/library/importService";
+import { isTouchPrimary, supportsDirectoryPicker } from "@/core/library/importService";
 import { matchTrack } from "@/core/library/search";
 import { showTagMenu, showPlaylistMenu } from "@/ui/menus";
 import { ScrollFade } from "@/ui/kit/ScrollFade";
@@ -107,6 +107,7 @@ export function LibraryScreen() {
   const tagStats = useTagStats();
   const { importDir, importList, rescan } = useImporter();
   const dirRef = useRef<HTMLInputElement>(null);
+  const filesRef = useRef<HTMLInputElement>(null);
   const [addUrlOpen, setAddUrlOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -124,9 +125,11 @@ export function LibraryScreen() {
       return next;
     });
 
-  // IMPORT button: native folder picker where available, universal input elsewhere
+  // IMPORT button: native folder picker where available; on phones the
+  // directory input is a dead end, so a plain multi-file picker takes over
   const onImportClick = () => {
     if (supportsDirectoryPicker()) void importDir();
+    else if (isTouchPrimary()) filesRef.current?.click();
     else dirRef.current?.click();
   };
 
@@ -253,6 +256,18 @@ export function LibraryScreen() {
             <span className="font-mono text-[10px] font-bold tracking-[0.2em] md:text-[11px]">RESCAN</span>
           </button>
           <DirectoryInput onFiles={(f) => void importList(f)} triggerRef={dirRef} />
+          <input
+            ref={filesRef}
+            type="file"
+            multiple
+            accept="audio/*,.mp3,.flac,.wav,.ogg,.opus,.m4a,.aac,.wv,.aiff"
+            className="hidden"
+            onChange={(e) => {
+              const files = Array.from(e.target.files ?? []);
+              if (files.length) void importList(files);
+              e.target.value = "";
+            }}
+          />
           <label
             className="clip-tag flex w-full min-w-0 items-center gap-2 bg-panel px-3 py-2 sm:w-auto"
             style={{ border: "1px solid var(--ato-border)" }}
