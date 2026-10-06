@@ -14,7 +14,14 @@ import {
 } from "@/core/library/playlists";
 import { createSmartPlaylist, deleteSmartPlaylist, matchSmartPlaylist, useSmartPlaylists } from "@/core/library/smartPlaylists";
 import { useCloud } from "@/core/cloud/cloudStore";
-import { cloudConfigured, cloudMode, isCatalogueTrack, manifestToTracks, resolveSourceFile, uploadTracks } from "@/core/cloud/cloudService";
+import {
+  cloudConfigured,
+  cloudMode,
+  isCatalogueTrack,
+  manifestToTracks,
+  resolveSourceFile,
+  uploadTracks,
+} from "@/core/cloud/cloudService";
 import { useCatalogue } from "@/core/cloud/catalogueStore";
 import { useCloudPlaylists } from "@/core/cloud/playlistStore";
 import { isLocalMirror } from "@/core/cloud/localPlaylistMirror";
@@ -25,6 +32,7 @@ import { PlaylistCover } from "@/ui/kit/PlaylistCover";
 import { PictureCropper } from "@/ui/kit/PictureCropper";
 import { isTouchPrimary, supportsDirectoryPicker } from "@/core/library/importService";
 import { matchTrack } from "@/core/library/search";
+import { groupAlbums } from "@/core/library/useLibrary";
 import { showTagMenu, showPlaylistMenu } from "@/ui/menus";
 import { ScrollFade } from "@/ui/kit/ScrollFade";
 import { showContextMenu } from "@/state/contextMenuStore";
@@ -105,6 +113,13 @@ export function LibraryScreen() {
   const tracks = useAllTracks();
   const artists = useArtists();
   const tagStats = useTagStats();
+  const catalogueManifest = useCatalogue((s) => s.manifest);
+  // the shared shelf, verbatim: the CATALOGUE scope reads the manifest
+  // directly because the merged library only carries downloaded/liked songs
+  const catalogueTracks = useMemo(
+    () => (catalogueManifest ? manifestToTracks(catalogueManifest) : []),
+    [catalogueManifest],
+  );
   const { importDir, importList, rescan } = useImporter();
   const dirRef = useRef<HTMLInputElement>(null);
   const filesRef = useRef<HTMLInputElement>(null);
@@ -168,32 +183,42 @@ export function LibraryScreen() {
     if (scope === "offline") return cloud && cachedPaths.has(t.path);
     return true;
   };
-  const filteredAlbums = useMemo(
-    () =>
-      albums.filter((a) => {
-        if (q && !(a.name.toLowerCase().includes(q) || a.artist.toLowerCase().includes(q))) return false;
-        if (selectedArtist && !selectedArtist.albumKeys.includes(a.key)) return false;
-        if (selectedTag && !a.tracks.some((t) => trackHasTag(t, selectedTag))) return false;
-        if (scope !== "all" && !a.tracks.some(matchesScope)) return false;
-        return true;
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [albums, q, selectedArtist, selectedTag, scope, cachedPaths],
+  const catalogueAlbums = useMemo(
+    () => (scope === "catalogue" ? groupAlbums(catalogueTracks) : []),
+    [scope, catalogueTracks],
   );
+  const filteredAlbums = useMemo(() => {
+    if (scope === "catalogue") {
+      return catalogueAlbums.filter((a) => {
+        if (q && !(a.name.toLowerCase().includes(q) || a.artist.toLowerCase().includes(q))) return false;
+        if (selectedTag && !a.tracks.some((t) => trackHasTag(t, selectedTag))) return false;
+        return true;
+      });
+    }
+    return albums.filter((a) => {
+      if (q && !(a.name.toLowerCase().includes(q) || a.artist.toLowerCase().includes(q))) return false;
+      if (selectedArtist && !selectedArtist.albumKeys.includes(a.key)) return false;
+      if (selectedTag && !a.tracks.some((t) => trackHasTag(t, selectedTag))) return false;
+      if (scope !== "all" && !a.tracks.some(matchesScope)) return false;
+      return true;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [albums, catalogueAlbums, q, selectedArtist, selectedTag, scope, cachedPaths]);
   const { filteredTracks, lyricsHits } = useMemo(() => {
-    if (!q && !selectedTag && scope === "all")
-      return { filteredTracks: tracks, lyricsHits: undefined as Set<number> | undefined };
+    const base = scope === "catalogue" ? catalogueTracks : tracks;
+    if (!q && !selectedTag && (scope === "all" || scope === "catalogue"))
+      return { filteredTracks: base, lyricsHits: undefined as Set<number> | undefined };
     const hits = new Set<number>();
-    const list = tracks.filter((t) => {
+    const list = base.filter((t) => {
       if (selectedTag && !trackHasTag(t, selectedTag)) return false;
-      if (scope !== "all" && !matchesScope(t)) return false;
+      if (scope !== "all" && scope !== "catalogue" && !matchesScope(t)) return false;
       const m = matchTrack(t, q);
       if (m.byLyrics) hits.add(t.id);
       return m.hit;
     });
     return { filteredTracks: list, lyricsHits: hits.size > 0 ? hits : undefined };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tracks, q, selectedTag, scope, cachedPaths]);
+  }, [tracks, catalogueTracks, q, selectedTag, scope, cachedPaths]);
   // artists matching the active tag: same name rule as groupArtists
   const shownArtists = useMemo(() => {
     if (!selectedTag) return artists;
@@ -371,7 +396,7 @@ export function LibraryScreen() {
         </div>
       )}
 
-      {albums.length === 0 && tab !== "playlists" ? (
+      {albums.length === 0 && (scope !== "catalogue" || catalogueTracks.length === 0) && tab !== "playlists" ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="py-16 text-center">
             <ListMusic className="mx-auto h-10 w-10 text-dim" strokeWidth={1.4} />
@@ -1036,6 +1061,13 @@ function LocalPlaylistsPane() {
   const savedCatIds = useUi((s) => s.savedCataloguePls);
   const catPlaylists = useCataloguePlaylists((s) => s.playlists);
   const liked = useLikedTracks();
+  const catManifest = useCatalogue((s) => s.manifest);
+  // saved catalogue playlists resolve against the SHARED manifest: members
+  // need not be liked/downloaded to show up in the playlist the user saved
+  const catalogueTracks = useMemo(
+    () => (catManifest ? manifestToTracks(catManifest) : []),
+    [catManifest],
+  );
   // the left rail can summon a playlist from any view (PINNED section)
   useEffect(() => {
     if (playlistFocus) setSelectedId(playlistFocus.id);
@@ -1064,13 +1096,13 @@ function LocalPlaylistsPane() {
   const resolved = useMemo(() => {
     if (likedSelected) return liked;
     if (savedCatSelected) {
-      const byPath = new Map(tracks.map((t) => [t.path, t]));
+      const byPath = new Map(catalogueTracks.map((t) => [t.path, t]));
       return savedCatSelected.trackKeys.map((k) => byPath.get(k)).filter((t): t is NonNullable<typeof t> => !!t);
     }
     if (!selected) return [];
     const byId = new Map(tracks.map((t) => [t.id, t]));
     return selected.trackIds.map((id) => byId.get(id)).filter((t): t is NonNullable<typeof t> => !!t);
-  }, [likedSelected, liked, savedCatSelected, selected, tracks]);
+  }, [likedSelected, liked, savedCatSelected, selected, tracks, catalogueTracks]);
 
   const totalSec = resolved.reduce((s, t) => s + (t.duration || 0), 0);
   const fmt = (s: number) => `${Math.floor(s / 60)} min`;
@@ -1157,7 +1189,7 @@ function LocalPlaylistsPane() {
             >
               <span className="shrink-0">
                 <CataloguePlaylistCover
-                  tracks={tracks.filter((t) => p.trackKeys.includes(t.path)).slice(0, 16)}
+                  tracks={catalogueTracks.filter((t) => p.trackKeys.includes(t.path)).slice(0, 16)}
                   title={p.name}
                   picKey={p.picKey}
                   className="h-10 w-10"

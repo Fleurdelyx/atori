@@ -856,6 +856,11 @@ export async function cacheTrack(key: string): Promise<boolean> {
     if (res.status === 401) throw new CloudAuthError();
     if (!res.ok) return false;
     await cache.put(cacheKey, res.clone());
+    // a freshly downloaded catalogue song now qualifies for the merged
+    // library view (downloaded or liked): rescan the cached set
+    if (key.startsWith("catalogue/")) {
+      void import("./catalogueStore").then((m) => m.useCatalogueCached.getState().refresh());
+    }
     return true;
   } catch (e) {
     if (e instanceof CloudAuthError) throw e;

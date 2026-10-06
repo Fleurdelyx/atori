@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { catalogueReady, fetchCatalogueManifest, CloudAuthError, type CloudManifest } from "./cloudService";
+import { catalogueReady, fetchCatalogueManifest, isCached, CloudAuthError, type CloudManifest } from "./cloudService";
 
 interface CatalogueState {
   manifest: CloudManifest | null;
@@ -28,10 +28,37 @@ export const useCatalogue = create<CatalogueState>()((set) => ({
     try {
       const manifest = await fetchCatalogueManifest();
       set({ manifest, status: "ready" });
+      void useCatalogueCached.getState().refresh();
     } catch (e) {
       const error =
         e instanceof CloudAuthError ? "Session expired: sign in again" : `Catalogue unreachable: ${String(e).slice(0, 80)}`;
       set({ status: "error", error });
     }
+  },
+}));
+
+interface CatalogueCachedState {
+  /** catalogue track paths present in this device's offline cache */
+  paths: Set<string>;
+  refresh: () => Promise<void>;
+}
+
+/**
+ * Which catalogue songs this device has downloaded. The merged library only
+ * surfaces shared-catalogue songs that are downloaded or liked (it is the
+ * server's shelf, not the user's), and this set is the "downloaded" half of
+ * that gate. Rescanned whenever the catalogue manifest changes or a
+ * catalogue download lands.
+ */
+export const useCatalogueCached = create<CatalogueCachedState>()((set) => ({
+  paths: new Set<string>(),
+  refresh: async () => {
+    const manifest = useCatalogue.getState().manifest;
+    const keys = manifest?.tracks.map((t) => t.key) ?? [];
+    const paths = new Set<string>();
+    for (const key of keys) {
+      if (await isCached(key)) paths.add(key);
+    }
+    set({ paths });
   },
 }));

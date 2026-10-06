@@ -5,7 +5,8 @@ import { splitGenres, type Grade, type TrackMeta } from "./types";
 import { computeWrapped, type WrappedPlay } from "./wrapped";
 import { manifestToTracks } from "@/core/cloud/cloudService";
 import { useCloud } from "@/core/cloud/cloudStore";
-import { useCatalogue } from "@/core/cloud/catalogueStore";
+import { useCatalogue, useCatalogueCached } from "@/core/cloud/catalogueStore";
+import { useFavorites } from "@/core/cloud/favoritesStore";
 import { usePlayStats } from "@/core/cloud/playStats";
 
 export { splitGenres };
@@ -42,12 +43,17 @@ export function useDexie<T>(fn: () => T | Promise<T>, deps: unknown[]): T | unde
  * the Spotify-style view where a hosted app streams from the worker instead
  * of importing files. Local wins on path collisions (it plays offline);
  * cloud rows come from the manifest, with play stats overlaid from the local
- * shadow rows the engine writes when a stream is played.
+ * shadow rows the engine writes when a stream is played. Shared-catalogue
+ * songs only join the list when this device downloaded or liked them — the
+ * catalogue is the server's shelf, not the user's library; the explicit
+ * CATALOGUE scope/screen reads the shared manifest directly instead.
  */
 export function useAllTracks(): TrackMeta[] {
   const local = useDexie(() => db.tracks.toArray(), [db]) ?? [];
   const manifest = useCloud((s) => s.manifest);
   const catalogueManifest = useCatalogue((s) => s.manifest);
+  const likedKeys = useFavorites((s) => s.keys);
+  const cachedCatalogue = useCatalogueCached((s) => s.paths);
   return useMemo(() => {
     const cloud = manifest ? manifestToTracks(manifest) : [];
     const catalogue = catalogueManifest ? manifestToTracks(catalogueManifest) : [];
@@ -102,14 +108,18 @@ export function useAllTracks(): TrackMeta[] {
       seen.add(id);
       out.push(shadowed({ ...c, inCatalogue: catalogueIds.has(id) }));
     }
+    // catalogue-only songs (no local or personal copy): gated on downloaded
+    // or liked so the shared shelf never floods the personal library view
+    const likedSet = new Set(likedKeys);
     for (const c of catalogue) {
       const id = identity(c);
       if (seen.has(id)) continue;
+      if (!likedSet.has(c.path) && !cachedCatalogue.has(c.path)) continue;
       seen.add(id);
       out.push(shadowed({ ...c, inCatalogue: true }));
     }
     return out;
-  }, [local, manifest, catalogueManifest]);
+  }, [local, manifest, catalogueManifest, likedKeys, cachedCatalogue]);
 }
 
 export interface ArtistInfo {
