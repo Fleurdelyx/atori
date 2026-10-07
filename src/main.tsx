@@ -156,6 +156,33 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+// Deploy staleness check: browsers love resuming a days-old page from memory,
+// which keeps running the old build no matter how many deploys land. When the
+// tab becomes visible, compare this page's build stamp against the freshly
+// served one and nudge a reload if they diverge. The service worker skips
+// "?__build" fetches so this always sees the real network HTML.
+if (import.meta.env.PROD && "serviceWorker" in navigator && !("__TAURI_INTERNALS__" in window)) {
+  const myBuild = document.querySelector('meta[name="atori-build"]')?.getAttribute("content") ?? "";
+  let lastCheck = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" || !myBuild) return;
+    const now = Date.now();
+    if (now - lastCheck < 15 * 60 * 1000) return;
+    lastCheck = now;
+    void fetch(`/?__build=${now}`, { cache: "no-store" })
+      .then((r) => r.text())
+      .then((html) => {
+        const m = html.match(/atori-build" content="([^"]+)"/);
+        if (m && m[1] !== myBuild) {
+          void import("@/state/toastStore").then(({ toast }) =>
+            toast("ATORI updated: reload the page for the new version", "info", "更新"),
+          );
+        }
+      })
+      .catch(() => {});
+  });
+}
+
 if (import.meta.env.DEV) {
   // Dev-only console/testing hook
   const [{ db }, { audioLevels }, { useSkinStore }] = await Promise.all([

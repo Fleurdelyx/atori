@@ -3,7 +3,23 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    {
+      // per-build stamp: the app compares its own stamp against a fresh "/"
+      // fetch and nudges a reload when a newer deploy is live (resumed tabs
+      // otherwise run old code forever)
+      name: "atori-build-id",
+      transformIndexHtml: () => [
+        {
+          tag: "meta",
+          attrs: { name: "atori-build", content: Date.now().toString(36) },
+          injectTo: "head",
+        },
+      ],
+    },
+  ],
   worker: { format: "es" },
   // Tauri expects a fixed port and no clearing of the console
   clearScreen: false,

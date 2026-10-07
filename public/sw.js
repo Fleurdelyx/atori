@@ -27,6 +27,8 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
+  // build-staleness checks must see the REAL network HTML: never intercept
+  if (url.searchParams.has("__build")) return;
 
   // navigations: network-first so deploys land, cache fallback for offline
   if (req.mode === "navigate") {
