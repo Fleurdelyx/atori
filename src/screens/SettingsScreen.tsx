@@ -767,9 +767,12 @@ export function SettingsScreen() {
       {/* about */}
       <section className="mb-16">
         <SectionHeader title="ABOUT" jp="情報" />
-        <div className="font-mono flex items-center gap-3 text-[10px] tracking-[0.2em] text-dim">
+        <div className="font-mono flex flex-wrap items-center gap-3 text-[10px] tracking-[0.2em] text-dim">
           <Shield className="h-3.5 w-3.5" style={{ color: "var(--ato-gold)" }} />
           ATORI // LOCAL-FIRST
+          <span className="opacity-70">
+            · BUILD {document.querySelector('meta[name="atori-build"]')?.getAttribute("content") ?? "dev"}
+          </span>
         </div>
       </section>
     </ScrollFade>

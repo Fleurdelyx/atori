@@ -700,35 +700,45 @@ class AudioEngine {
 
   private updateMediaSession(track: TrackMeta) {
     if (!("mediaSession" in navigator)) return;
-    // the lock-screen notification is rendered by the SYSTEM process: it can
-    // only fetch http(s) or data: URLs — the page-internal blob: URLs the
-    // cover cache hands out render as nothing. Metadata goes out immediately
-    // (title/artist first) and upgradeArtwork attaches fetchable art.
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: track.title,
-      artist: track.artist,
-      album: track.album,
-      artwork: [],
-    });
-    if (track.coverKey) void this.upgradeArtwork(track);
-    // action set is guarded: unsupported actions throw on some platforms
-    const on = (action: MediaSessionAction, fn: MediaSessionActionHandler) => {
-      try {
-        navigator.mediaSession.setActionHandler(action, fn);
-      } catch {
-        /* platform without this action */
+    // the whole setup is guarded: a stripped fork that accepts the session
+    // object but lacks MediaMetadata (or throws anywhere here) must not take
+    // down the handlers + playback state, which are what keep the session
+    // alive and the notification up
+    try {
+      // the lock-screen notification is rendered by the SYSTEM process: it can
+      // only fetch http(s) or data: URLs — the page-internal blob: URLs the
+      // cover cache hands out render as nothing. Metadata goes out immediately
+      // (title/artist first) and upgradeArtwork attaches fetchable art.
+      if (typeof MediaMetadata === "function") {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          artwork: [],
+        });
+        if (track.coverKey) void this.upgradeArtwork(track);
       }
-    };
-    on("play", () => void this.play());
-    on("pause", () => void this.pause());
-    on("previoustrack", () => void this.prev());
-    on("nexttrack", () => void this.next());
-    on("seekto", (d) => {
-      if (d.seekTime != null) this.seek(d.seekTime);
-    });
-    on("seekbackward", () => this.seek(this.el.currentTime - 10));
-    on("seekforward", () => this.seek(this.el.currentTime + 10));
-    on("stop", () => void this.pause());
+      // action set is guarded: unsupported actions throw on some platforms
+      const on = (action: MediaSessionAction, fn: MediaSessionActionHandler) => {
+        try {
+          navigator.mediaSession.setActionHandler(action, fn);
+        } catch {
+          /* platform without this action */
+        }
+      };
+      on("play", () => void this.play());
+      on("pause", () => void this.pause());
+      on("previoustrack", () => void this.prev());
+      on("nexttrack", () => void this.next());
+      on("seekto", (d) => {
+        if (d.seekTime != null) this.seek(d.seekTime);
+      });
+      on("seekbackward", () => this.seek(this.el.currentTime - 10));
+      on("seekforward", () => this.seek(this.el.currentTime + 10));
+      on("stop", () => void this.pause());
+    } catch (e) {
+      console.warn("MediaSession setup failed", e);
+    }
     // claimed at LOAD start (updateMediaSession is called before play()
     // resolves): the buffering gap is exactly when Chrome considers the page
     // "not playing" and drops the notification + audio focus
